@@ -1,0 +1,173 @@
+---
+title: "Tutorial 3 - Sequence Alignment"
+author: "Almog Angel"
+date: "31/1/2024"
+output: html_document
+---
+
+## Class exercise
+
+- Load packages and set working directory
+```{r}
+library(Biostrings)
+library(msa)
+library(msaR)
+
+setwd("~/Documents/intro_to_bioinformatics/winter2324/tutorial_3/")
+```
+
+- Load Wuhan's covid genome
+```{r}
+wuhan.covid.genome <- readDNAStringSet("wuhan_covid_genome.fasta")
+wuhan.covid.genome
+```
+
+- Find how many start codons ("ATG") exist in the genome
+```{r}
+vmatchPattern("ATG", wuhan.covid.genome)  # 725
+# However, the virus have only about 15 genes
+```
+
+- Find the reverse complement sequence of the first 10bp
+```{r}
+first10bp <- wuhan.covid.genome[[1]][1:10]
+first10bp
+reverseComplement(first10bp)
+```
+
+- Find the G/C content of the COVID-19 genome
+```{r}
+letterFrequency(wuhan.covid.genome, letters = "GC", as.prob = TRUE)
+```
+
+- Load the protein sequence of the spike protein from wuhan_spike.fasta
+```{r}
+wuhan.covid.spike.aa <- readAAStringSet("wuhan_spike.fasta")
+wuhan.covid.spike.aa
+```
+
+- Extract the first 5 amino acids from the protein sequence
+```{r}
+first_5aa <- wuhan.covid.spike.aa[[1]][1:5]
+first_5aa
+```
+
+## Task 1 - Extract the spike DNA sequence
+
+- Look at the genetic code (from DNA to AA)
+```{r}
+GENETIC_CODE
+```
+
+- In some cases, the same amino acid can be originated from different codons
+- Here are 5 possible DNA sequences that can be translate to the same amino acid sequence
+```{r}
+possible_dna_seq <- DNAStringSet(c("ATGTTTGTGTTCCTG",
+                      "ATGTTTGTATTCCTA",
+                      "ATGTTTGTTTTTCTT",
+                      "ATGTTCGTTTTTCTC",
+                      "ATGTTCGTTTTCCTT"))
+Biostrings::translate(possible_dna_seq)
+```
+
+- However, only one sequence completely match the beginning of the COVID-19 spike sequences
+- Find out which sequence match by using the function pairwiseAlignment()
+- First, read the documentation by running ?pairwiseAlignment
+- Save your results to a variable named "alignment.out"
+
+```{r}
+?pairwiseAlignment
+
+# Write your code here:
+
+```
+
+- Look at the results
+```{r}
+alignedPattern(alignment.out)
+```
+
+- Which sequence have complete match? assign the sequence number to "n"
+- Find the position where the spike gene start
+```{r}
+# assign the sequence number to "n"
+n <- 
+alignment.out[n] 
+```
+
+- Assign the position to "start"
+```{r}
+start <-  # insert start position
+```
+
+- Fina the position where the gene ends and assign to "end" (Hint: used the width() function)
+- Extract the spike gene sequence and assign to "covid.spike.dna"
+```{r}
+
+```
+
+
+## Task 2 - Multiple Sequence Alignments
+
+- Read "spikes.fasta" into "all.spikes"
+- This file contain DNA sequence of spike proteins from humans (Hu), bats (Bt), civet (Cv), camel (Cm) and pangolin (Pn)
+```{r}
+# Compare covid19 to other viruses
+all.spikes <- readDNAStringSet("spikes.fasta")
+names(all.spikes)
+```
+
+- Change to more friendly names
+```{r}
+names(all.spikes) <- c("Pn_SARS-CoV-2", "Bt_SARS-CoV-2", "Bt_SARS-CoV",
+                         "Cv_SARS-CoV", "Hu_SARS-CoV", "Bt_MERS-CoV",
+                         "Cm_MERS-CoV", "Hu_MERS-CoV")
+all.spikes
+```
+
+- Add the human SARS-CoV-2 spike sequence we extracted in task 1
+```{r}
+all.spikes[[9]] <- covid.spike.dna
+names(all.spikes)[9] <- "Hu_SARS-CoV-2"
+all.spikes
+```
+
+
+- Run MSA for all sequences in "all.spikes" (might take a 1-2 minutes to finish)
+- Assign the output to "all.spikes.msa"
+```{r}
+?msa
+
+# Write your code here:
+
+```
+
+- Visualize results
+```{r}
+msaR(DNAMultipleAlignment(all.spikes.msa), colorscheme = "taylor")
+```
+
+
+## Task 3 - Construct a phylogenetic tree
+
+- Now we will construct a phylogenetic tree form the MSA results
+
+- Run this code to convert msa object to seqinr object
+```{r}
+covid.spikes.msa.seqinr <- msaConvert(all.spikes.msa, type="seqinr::alignment")
+```
+
+- Run this code to calculate a distance matrix of all sequences
+```{r}
+covid.spikes.msa.distmat <- seqinr::dist.alignment(covid.spikes.msa.seqinr, matrix = "similarity")
+covid.spikes.msa.distmat
+```
+
+- Finally we can look at the phylogenetic tree (dendrogram) assembled by hierarchical clustering
+```{r}
+covid.spikes.msa.clusters <- hclust(covid.spikes.msa.distmat, method = "average")
+plot(covid.spikes.msa.clusters, hang = -1, main = "Spikes phylogenetic three", xlab = "Organism", ylab  = "Distance")
+```
+
+
+- Explain what you see in the phylogenetic three

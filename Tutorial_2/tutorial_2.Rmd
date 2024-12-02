@@ -1,0 +1,169 @@
+---
+title: "Tutorial 2 - Statistics"
+author: "Almog Angel"
+date: "24/01/2024"
+output: html_document
+---
+
+## Corona cabinet challenge
+
+```{r}
+library(tidyverse)
+# Also install the package "plyr"
+
+vac_by_city <- read_csv("/Users/almogang/Documents/intro_to_bioinformatics/winter2324/tutorial_2/vaccinated_city_table_ver_00246.csv")
+vac_by_city
+```
+
+## Orginaze data
+
+- Transform data to long data format for using maximum of Tidyverse's power!
+```{r}
+vac_by_city <- vac_by_city %>% 
+  pivot_longer(cols = -c(CityName, CityCode, Date), names_to = "age_group", values_to = "n_vac")
+
+vac_by_city
+```
+
+- Convert n_vac column to numeric
+```{r}
+# We will assume that <15 equal 10 people
+vac_by_city <- vac_by_city %>% 
+  mutate(n_vac = ifelse(n_vac == "<15", 10, n_vac)) %>% 
+  mutate(n_vac = as.numeric(n_vac))
+
+vac_by_city
+```
+
+- Calculate the total number of people vaccinated per city
+```{r}
+vac_by_city <- vac_by_city %>% 
+  group_by(CityName, CityCode, Date) %>% 
+  summarise(total_vac_per_city = sum(n_vac)) %>% 
+  ungroup()
+
+vac_by_city
+```
+
+
+- Load data about the population of each city
+```{r}
+city_code2population <- read_csv("/Users/almogang/Documents/intro_to_bioinformatics/winter2324/tutorial_2/city_code2population.csv")
+city_code2population
+```
+
+- Assign data about population of cities by city_code
+```{r}
+vac_by_city <- vac_by_city %>% 
+  left_join(city_code2population, by = c("CityCode" = "city_code")) %>% 
+  rename(city_population = total)
+
+vac_by_city
+```
+
+- Calculate the relative vaccination per city
+```{r}
+vac_by_city <- vac_by_city %>% 
+  mutate(relative_vac = round(total_vac_per_city/city_population*100, 2))
+
+vac_by_city
+```
+
+- Check for NAs
+```{r}
+vac_by_city[is.na(vac_by_city$relative_vac),]
+```
+
+- Drop NAs
+```{r}
+vac_by_city <- vac_by_city %>% 
+  drop_na()
+
+vac_by_city
+```
+
+- Visualize the data (does something looks wrong?)
+```{r}
+vac_by_city %>% 
+  ggplot(., aes(relative_vac)) +
+  geom_histogram(position = 'identity', bins = 50)
+```
+
+
+## Run statistical test
+
+- Use most updated data
+```{r}
+vac_by_city <- vac_by_city %>% 
+  filter(Date == "2021-10-26")
+
+vac_by_city
+```
+
+
+- Sample 7 cities per group
+```{r}
+center_cities <- c("Tel Aviv-Yafo", "Ramat Gan", "Giv'atayim", "Holon", "Bat Yam", "Rehovot", "Ramat HaSharon", "Herzliya", "Ra'anana", "Kiryat Ono", "Yavne", "Rishon-LeZion", "Netanya", "Kfar Saba", "Hod HaSharon", "Petah Tikva", "Or Yehuda", "Yehud", "Ramla", "Lod", "Ness Ziona", "Modi'in-Maccabim-Re'ut", "Kiryat Motzkin", "Giv'at Shmuel", "Rosh HaAyin", "Kiryat Tiv'on", "Shoham", "Savyon", "Kfar Yona", "Mazkeret Batya")
+
+center <- c(5000, 8600, 6300, 6600, 6200, 8400, 2650, 6400, 8700, 2620, 2660, 8300, 7400, 6900, 9700, 7900, 2400, 9400, 8500, 7000, 7200, 1200, 8200, 681, 2640, 2300, 1304, 587, 168, 28)
+
+perip_cities <- c("Ofakim", "Eilat", "Ashdod", "Ashkelon", "Be'er Sheva", "Beit She'an", "Dimona", "Yeruham", "Nahariya", "Arad", "Kiryat Gat", "Kiryat Shmona", "Katzrin", "Shlomi", "Afula", "Hatzor HaGlilit", "Tiberias", "Netivot", "Nesher", "Kiryat Malachi", "Sderot", "Kiryat Ekron", "Rosh Pina", "Karmiel", "Ma'alot-Tarshiha", "Nof HaGalil", "Acre", "Hadera", "Shefar'am", "Tamra")
+
+periphery <- c(31, 2600, 70, 7100, 9000, 9200, 2200, 831, 9100, 2560, 2630, 2800, 4100, 812, 7700, 2034, 6700, 246, 2500, 1034, 1031, 469, 26, 1139, 1063, 1061, 7600, 6500, 8800, 8900)
+
+
+cent_vs_perip <- vac_by_city %>% 
+  ungroup() %>% 
+  filter(CityCode %in% c(center, periphery)) %>% 
+  mutate(CityName = plyr::mapvalues(CityCode, from = c(center, periphery), to = c(center_cities, perip_cities)))
+
+unique(cent_vs_perip$CityName)
+
+
+```
+
+
+- Add a column that say whether the city is in the periphery or center
+```{r}
+cent_vs_perip <- cent_vs_perip %>% 
+  mutate(location = ifelse(CityCode %in% periphery, "Periphery", "Center"))
+
+cent_vs_perip
+```
+
+- Visualize the data with boxplot
+```{r}
+ggplot(cent_vs_perip, aes(x=location, y=relative_vac)) +
+  geom_boxplot(aes(fill=location)) +
+  geom_point() +
+  geom_text(aes(label=CityName), hjust=0.5, vjust=-1)
+
+```
+
+- Visualize the data with histograms
+```{r}
+ggplot(cent_vs_perip, aes(x=relative_vac, fill = location)) +
+  geom_histogram(position = 'identity', bins = 50, alpha = 0.5)
+```
+
+
+** Test for normality: ***
+```{r}
+shapiro.test(cent_vs_perip[cent_vs_perip$location == "Center",]$relative_vac)
+shapiro.test(cent_vs_perip[cent_vs_perip$location == "Periphery",]$relative_vac)
+```
+
+
+
+## ToDo:
+- Define the null and alternative hypothesis
+- Run a t-test using the t.test() function 
+- Report the t- and p-values
+- What is your conclusion?
+
+```{r}
+# Run t-test here:
+
+
+
+```

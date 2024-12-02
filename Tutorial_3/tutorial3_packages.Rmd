@@ -1,0 +1,25 @@
+---
+title: "Packages for tutorial 3"
+author: "Almog Angel"
+date: "31/1/2024"
+output: html_document
+---
+
+- Install bioconductor package manager
+```{r}
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install(version = "3.18")
+```
+
+- Install required packages
+```{r}
+# From bioconductor
+BiocManager::install("Biostrings")
+BiocManager::install("msa")
+
+# From CRAN
+install.packages("seqinr")
+install.packages("msaR")
+```
+

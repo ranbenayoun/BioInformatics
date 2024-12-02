@@ -1,0 +1,319 @@
+---
+title: "Homework 1"
+author: "<ID1>_<ID2>"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+In the following tasks you will use statistics and sequence alignment to analyze real COVID-19 world data.
+
+- Load packages
+```{r message=TRUE, warning=TRUE, include=FALSE}
+library(tidyverse)
+library(Biostrings)
+library(msa)
+library(msaR)
+```
+
+- Set your working directory
+```{r include=FALSE}
+
+```
+
+
+## Task 1: Data Exploration, Cleaning, and Preparation
+
+This task involves exploring the dataset, identifying missing or irrelevant data, and cleaning the dataset for further analysis.
+
+### Step 1: Load the Dataset
+
+Load the dataset `COVID19_line_list_data.csv` into R.
+
+```{r load-data}
+# Load the dataset and inspect the first few rows
+```
+
+### Step 2: Basic Dataset Overview
+
+- How many rows and columns are in the dataset?
+- What are the column names?
+
+```{r dataset-overview}
+# Write code to find the dimensions and column names
+```
+
+### Step 3: Identify Missing Data
+
+- Calculate the percentage of missing values for each column.
+- Visualize missing data with a bar plot.
+
+```{r missing-data}
+# Write code to calculate and visualize missing data
+```
+
+### Step 4: Handle Missing Data
+
+- Identify columns with more than 50% missing data and remove them.
+
+```{r handle-missing-data}
+# Write code to handle missing data
+```
+
+### Step 5: Convert Date Columns to Proper Format
+
+- Convert `reporting date` and `symptom onset` columns to date format.
+- Create a new column calculating the difference between `reporting date` and `symptom onset`.
+Note: Some dates state the year as 19/20 instead of 2019/2020
+```{r date-conversion}
+# Write code to convert date columns and calculate the difference
+```
+
+### Step 6: Summary Statistics of Cleaned Data
+
+- Generate summary statistics (mean, median, min, max) for numeric columns.
+- Count the number of cases by gender.
+
+```{r summary-stats}
+# Write code to generate summary statistics
+```
+
+### Step 7: Data Visualization
+
+- Create a histogram to visualize the distribution of ages in the dataset.
+- Generate a bar plot to show the number of cases by gender.
+
+```{r data-visualization}
+# Write code to create the histogram and bar plot
+```
+
+### Step 8: Filter Data for Specific Conditions
+
+- Filter the dataset to include only cases from China where the patient has recovered.
+- Calculate the average age of recovered patients in this subset.
+
+```{r filter-data}
+# Write code to filter data and calculate the average age
+```
+
+## Task 2: Statistical Analysis
+
+This task involves testing a hypothesis related to COVID-19 data. The goal is to assess whether the average age of patients who recovered differs significantly from those who did not recover.
+
+### Step 1: Formulate the Hypothesis
+
+Before running the test, answer the following in free text:
+
+1. **What is the null hypothesis?**  
+2. **What is the alternative hypothesis?**  
+3. **What type of data are we working with? (e.g., categorical, numerical, etc.)**  
+4. **How do we assess the normality of the data?**  
+5. **How should the test statistics and p-value be interpreted?**
+
+**Write your answers here as free text:**
+
+
+### Step 2: Data Preparation
+
+- Filter the data into two groups: recovered and non-recovered patients.
+- Remove rows with missing values in the `age` column.
+Note: Any value other than zero in the "recovered" column means that the patient didn't die.
+
+```{r data-prep}
+# Write code to filter and clean the data
+```
+
+### Step 3: Assess Normality
+
+- Use a histogram and a Shapiro-Wilk test to assess the normality of age distribution for both groups.
+
+```{r normality-test}
+# Write code to assess normality
+```
+
+1. **Does the Shapiro-Wilk test results indicated that the data follow a normal distributions?**  
+2. **How does it affect our choice of statistical test?**  
+
+**Write your answers here as free text:**
+
+### Step 4: Perform a Mann-Whitney U Test
+
+```{r mann-whitney-test}
+# Write code to perform a Mann-Whitney U test
+```
+
+### Step 5: Visualize the Results with Boxplots
+
+- Create a boxplot to visualize the age distribution for recovered and non-recovered groups.
+- Display the p-value above the boxplot.
+
+```{r boxplot-visualization}
+# Write code to create the boxplot and annotate with the p-value
+```
+
+### Step 6: Interpret the Results
+
+In free text, answer the following questions:
+
+1. **Was the null hypothesis rejected?**  
+2. **What do the test statistic and p-value tell us?**  
+3. **Is there evidence to suggest a difference in mean age between the groups?**  
+
+**Write your answers here as free text:**
+
+
+
+## Task 3: Analyzing COVID-19 Mortality and Human Development Index (HDI)
+
+In this task, we will explore the hypothesis that countries with a high Human Development Index (HDI) have a greater risk of dying from COVID-19.
+
+### Step 1: Load the Data
+
+- Read "owid-covid-data.csv" from the URL into a variable called `covid_world`.
+
+```{r}
+# Enter your code here:
+```
+
+### Step 2: Take a Look at the Data
+
+- View the dataset.
+
+```{r include=FALSE}
+View(covid_world)
+```
+
+
+### Step 3: Create a Subset for Analysis
+
+- Do the following using pipes ("%>%" or "|>") followed by the correct functions from the `tidyverse` package.
+- Make a second table and call it `covid_hdi_vs_deaths`:
+  1. Keep rows where `date` is equal to "2021-11-08".
+  2. Select the columns: `"location"`, `"human_development_index"`, `"population"`, `"total_deaths"`.
+  3. Remove rows with `NA` values.
+  4. Add a column `total_deaths_per_million` that normalize the total death in each country per million (round the final value).
+
+```{r}
+# Enter your code here:
+```
+
+
+### Step 4: Visualize the Relationship
+
+- Create a scatterplot to visualize the relationship between HDI and `total_deaths_per_million`.
+- Add a linear regression line to the plot using `geom_smooth`
+
+```{r}
+# Enter your code here:
+```
+
+### Step 5: Calculate Correlations
+
+- Calculate the **Pearson** and **Spearman** correlation coefficients between HDI and `total_deaths_per_million`.
+
+```{r}
+# Enter your code here:
+```
+
+
+### Step 6: Interpret the Correlation
+
+- Report the Pearson and Spearman correlation coefficients, the strength (weak/moderate/strong/very strong), and the direction (positive/negative).
+
+**Write your answers here as free text:**
+
+
+### Step 7: Assess the Claim
+
+- Do you agree with the claim that increased HDI causes higher COVID-19 mortality? Write a detailed explanation.
+
+**Write your answers here as free text:**
+
+
+### Step 8: Find Another Feature
+
+- Find another feature in `covid_world` that might explain the correlation between HDI and COVID-19 mortality.
+- Plot this feature as in step 4.
+
+
+```{r}
+# Enter your code here:
+```
+
+### Step 9: Explain the New Finding
+
+- Write your explanation for the relationship you found.
+
+**Write your answers here as free text:**
+
+
+## Task 4 - Sequence Alignment
+
+- Take a look at the "Biostrings" package vignettes
+```{r include=FALSE}
+browseVignettes("Biostrings")
+```
+
+- Download the file "covid_spike_variants.fasta" from the course website
+This file contain the amino acids sequence of the COVID-19 spike protein from different variants
+
+- Load the file using the correct function from the package "Biostrings" and assign to a variable called "variants"
+```{r}
+# Enter your code here:
+```
+
+- How many amina acids are in the Alpha variant?
+
+**Write your answers here as free text:**
+
+
+- Read the documentation for the Multiple Sequence Alignment (msa) function from the package "msa"
+- Run MSA for the sequences in "variants" and assign the results to "variants.msa"
+```{r}
+# Enter your code here:
+```
+
+
+- Take a look at the results using the package "msaR" (notice: you can scroll right and left to see all the sequence)
+```{r}
+msaR(AAMultipleAlignment(variants.msa), colorscheme = "taylor")
+```
+
+- (1) Which amino-acids appear in position #26? (type "AMINO_ACID_CODE" in the console)
+- (2) Write an example of a SNP that can cause the change in amino acid as we see in the Gamma variant
+
+**Write your answers here as free text:**
+
+
+Phylogenetic tree for the COVID19 variants:
+- Use the package "seqinr" to generate a distance matrix from the MSA results
+```{r include=FALSE}
+# Enter your code here:
+```
+
+- Plot a phylogenetic tree (dendrogram) assembled by hierarchical clustering using the "ward.D" method
+```{r}
+# Enter your code here:
+```
+
+
+- Look at the phylogenetic tree and answer the following questions:
+1. Which variant is most similar to the Beta variant?
+2. Which pair of variants are the closest?
+
+**Write your answers here as free text:**
+
+
+# Instructions to Knit the Homework as an HTML File Before Submission
+
+1. Replace `<ID1>` and `<ID2>` in the YAML header with your student IDs:
+   ```yaml
+   title: "Homework 1"
+   author: "<ID1>_<ID2>"
+   date: "`r Sys.Date()`"
+   output: html_document
+   ```
+   Example: `author: "123456789_123456789"`
+
+2. Click the arrow next to the **Knit** button, and click **Knit to HTML**
+
+3. Verify the output and submit the HTML file to the course website
