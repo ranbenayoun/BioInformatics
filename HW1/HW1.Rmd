@@ -1,6 +1,6 @@
 ---
 title: "Homework 1"
-author: "<ID1>_<ID2>"
+author: "<206078974>_<ID2>"
 date: "`r Sys.Date()`"
 output: html_document
 ---
@@ -17,7 +17,7 @@ library(msaR)
 
 - Set your working directory
 ```{r include=FALSE}
-
+setwd('')
 ```
 
 
@@ -31,6 +31,7 @@ Load the dataset `COVID19_line_list_data.csv` into R.
 
 ```{r load-data}
 # Load the dataset and inspect the first few rows
+covid_data <- read.csv("COVID19_line_list_data.csv")
 ```
 
 ### Step 2: Basic Dataset Overview
@@ -40,6 +41,10 @@ Load the dataset `COVID19_line_list_data.csv` into R.
 
 ```{r dataset-overview}
 # Write code to find the dimensions and column names
+dim <- dim(covid_data)
+dim 
+col_names <- colnames(covid_data)
+col_names
 ```
 
 ### Step 3: Identify Missing Data
@@ -49,6 +54,29 @@ Load the dataset `COVID19_line_list_data.csv` into R.
 
 ```{r missing-data}
 # Write code to calculate and visualize missing data
+# Load necessary library
+library(ggplot2)
+
+# Calculate the percentage of missing values for each column in covid_data
+missing_percentage <- colSums(is.na(covid_data)) / nrow(covid_data) * 100
+
+# Create a data frame for visualization
+missing_data <- data.frame(
+  Column = names(missing_percentage),
+  MissingPercentage = missing_percentage
+)
+
+# Visualize the missing data with a bar plot
+ggplot(missing_data, aes(x = Column, y = MissingPercentage)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(
+    title = "Percentage of Missing Values by Column in COVID Data",
+    x = "Column",
+    y = "Missing Percentage (%)"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
 ```
 
 ### Step 4: Handle Missing Data
@@ -57,6 +85,22 @@ Load the dataset `COVID19_line_list_data.csv` into R.
 
 ```{r handle-missing-data}
 # Write code to handle missing data
+
+# Calculate the percentage of missing values for each column
+missing_percentage <- colSums(is.na(covid_data)) / nrow(covid_data) * 100
+
+# Identify columns with more than 50% missing data
+columns_to_remove <- names(missing_percentage[missing_percentage > 50])
+
+# Remove columns with more than 50% missing data
+covid_data_cleaned <- covid_data[, !(names(covid_data) %in% columns_to_remove)]
+
+# Print the names of removed columns
+cat("Removed columns with more than 50% missing data:", paste(columns_to_remove, collapse = ", "), "\n")
+
+# Summary of the cleaned dataset
+print(dim(covid_data_cleaned))
+
 ```
 
 ### Step 5: Convert Date Columns to Proper Format
@@ -172,6 +216,8 @@ In this task, we will explore the hypothesis that countries with a high Human De
 
 ```{r}
 # Enter your code here:
+covid_world <- read.csv("owid-covid-data.csv")
+covid_world
 ```
 
 ### Step 2: Take a Look at the Data

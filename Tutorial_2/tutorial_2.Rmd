@@ -11,7 +11,7 @@ output: html_document
 library(tidyverse)
 # Also install the package "plyr"
 
-vac_by_city <- read_csv("/Users/almogang/Documents/intro_to_bioinformatics/winter2324/tutorial_2/vaccinated_city_table_ver_00246.csv")
+vac_by_city <- read_csv("vaccinated_city_table_ver_00246.csv")
 vac_by_city
 ```
 
@@ -20,8 +20,11 @@ vac_by_city
 - Transform data to long data format for using maximum of Tidyverse's power!
 ```{r}
 vac_by_city <- vac_by_city %>% 
-  pivot_longer(cols = -c(CityName, CityCode, Date), names_to = "age_group", values_to = "n_vac")
-
+  pivot_longer(cols = -c(CityName, CityCode, Date), names_to = "age_group", values_to = "n_vac") %>%
+  filter(Date == "2021-10-26") %>%
+  separate(age_group, into = c("dose","dose2", "age_group"), sep = "_") %>%
+  select(-dose2) %>%
+  filter(dose == "third")
 vac_by_city
 ```
 
@@ -48,7 +51,7 @@ vac_by_city
 
 - Load data about the population of each city
 ```{r}
-city_code2population <- read_csv("/Users/almogang/Documents/intro_to_bioinformatics/winter2324/tutorial_2/city_code2population.csv")
+city_code2population <- read_csv("city_code2population.csv")
 city_code2population
 ```
 
@@ -163,7 +166,7 @@ shapiro.test(cent_vs_perip[cent_vs_perip$location == "Periphery",]$relative_vac)
 
 ```{r}
 # Run t-test here:
-
-
+cent_vs_perip$location <- factor(cent_vs_perip$location, levels = c("Center", "Periphery"))
+t.test(cent_vs_perip$relative_vac ~ cent_vs_perip$location, alternative = "greater")
 
 ```
