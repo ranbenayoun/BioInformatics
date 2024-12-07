@@ -17,7 +17,7 @@ library(msaR)
 
 - Set your working directory
 ```{r include=FALSE}
-setwd('')
+setwd("C:/Users/ranbe/OneDrive - Technion/טכניון/לימודים/תואר שני/ביואינפורמטיקה/HW1")
 ```
 
 
@@ -110,6 +110,18 @@ print(dim(covid_data_cleaned))
 Note: Some dates state the year as 19/20 instead of 2019/2020
 ```{r date-conversion}
 # Write code to convert date columns and calculate the difference
+
+# Ensure the columns have consistent year formatting
+covid_data_cleaned$reporting.date <- as.Date(sub("(\\d{2})$", "20\\1", covid_data_cleaned$reporting.date), format = "%m/%d/%Y")
+covid_data_cleaned$symptom_onset <- as.Date(sub("(\\d{2})$", "20\\1", covid_data_cleaned$symptom_onset), format = "%m/%d/%Y")
+
+# Calculate the difference in days
+covid_data_cleaned$date_difference <- as.numeric(covid_data_cleaned$reporting.date - covid_data_cleaned$symptom_onset)
+
+# View the updated data frame
+head(covid_data_cleaned)
+
+
 ```
 
 ### Step 6: Summary Statistics of Cleaned Data
@@ -119,6 +131,18 @@ Note: Some dates state the year as 19/20 instead of 2019/2020
 
 ```{r summary-stats}
 # Write code to generate summary statistics
+# Generate summary statistics for all numeric columns
+numeric_summary <- summary(covid_data_cleaned[sapply(covid_data_cleaned, is.numeric)])
+
+# View the summary statistics
+print(numeric_summary)
+
+# Count cases by gender
+gender_count <- table(covid_data_cleaned$gender)
+
+# View the gender count
+print(gender_count)
+
 ```
 
 ### Step 7: Data Visualization
@@ -128,6 +152,32 @@ Note: Some dates state the year as 19/20 instead of 2019/2020
 
 ```{r data-visualization}
 # Write code to create the histogram and bar plot
+par(mfrow = c(1, 2))  # Split plot area into 1 row and 2 columns
+
+# Histogram
+hist(
+  covid_data_cleaned$age,
+  breaks = 20,
+  main = "Age Distribution",
+  xlab = "Age",
+  col = "skyblue",
+  border = "white",
+  las = 1
+)
+
+# Bar Plot
+barplot(
+  gender_count,
+  main = "Number of Cases by Gender",
+  xlab = "Gender",
+  ylab = "Number of Cases",
+  col = c("lightpink", "lightblue", "lightgreen"),
+  border = "white",
+  las = 1
+)
+
+par(mfrow = c(1, 1))  # Reset plot area to single plot
+
 ```
 
 ### Step 8: Filter Data for Specific Conditions

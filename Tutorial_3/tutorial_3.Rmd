@@ -76,10 +76,10 @@ Biostrings::translate(possible_dna_seq)
 - Save your results to a variable named "alignment.out"
 
 ```{r}
-?pairwiseAlignment
+??pairwiseAlignment
 
 # Write your code here:
-
+alignment.out <- pairwiseAlignment(pattern = possible_dna_seq, subject = wuhan.covid.genome, type = "local")
 ```
 
 - Look at the results
@@ -91,19 +91,22 @@ alignedPattern(alignment.out)
 - Find the position where the spike gene start
 ```{r}
 # assign the sequence number to "n"
-n <- 
+n <- 3
 alignment.out[n] 
 ```
 
 - Assign the position to "start"
 ```{r}
-start <-  # insert start position
+start <- 21563 # insert start position
 ```
 
-- Fina the position where the gene ends and assign to "end" (Hint: used the width() function)
+- Find the position where the gene ends and assign to "end" (Hint: used the width() function)
 - Extract the spike gene sequence and assign to "covid.spike.dna"
 ```{r}
-
+end <- start + width(wuhan.covid.spike.aa)*3 + 2 # +2 for the stop codon
+#start:(start+3)
+covid.spike.dna <- wuhan.covid.genome[[1]][start:end]
+covid.spike.dna
 ```
 
 
@@ -136,10 +139,8 @@ all.spikes
 - Run MSA for all sequences in "all.spikes" (might take a 1-2 minutes to finish)
 - Assign the output to "all.spikes.msa"
 ```{r}
-?msa
-
-# Write your code here:
-
+all.spikes.msa <- msa(inputSeqs = all.spikes, type = "dna")
+all.spikes.msa
 ```
 
 - Visualize results
