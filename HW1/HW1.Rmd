@@ -86,21 +86,28 @@ ggplot(missing_data, aes(x = Column, y = MissingPercentage)) +
 ```{r handle-missing-data}
 # Write code to handle missing data
 
+# Ensure the dataset is a tibble for tidyverse compatibility
+covid_data <- as_tibble(covid_data)
+
 # Calculate the percentage of missing values for each column
-missing_percentage <- colSums(is.na(covid_data)) / nrow(covid_data) * 100
+missing_percentage <- covid_data %>%
+  summarise(across(everything(), ~ mean(is.na(.)) * 100)) %>%
+  pivot_longer(everything(), names_to = "column", values_to = "missing_percentage")
 
 # Identify columns with more than 50% missing data
-columns_to_remove <- names(missing_percentage[missing_percentage > 50])
+columns_to_remove <- missing_percentage %>%
+  filter(missing_percentage > 50) %>%
+  pull(column)
 
-# Remove columns with more than 50% missing data
-covid_data_cleaned <- covid_data[, !(names(covid_data) %in% columns_to_remove)]
+# Remove columns with more than 50% missing data using dplyr explicitly
+covid_data_cleaned <- covid_data %>%
+  dplyr::select(-all_of(columns_to_remove))
 
 # Print the names of removed columns
 cat("Removed columns with more than 50% missing data:", paste(columns_to_remove, collapse = ", "), "\n")
 
 # Summary of the cleaned dataset
 print(dim(covid_data_cleaned))
-
 ```
 
 ### Step 5: Convert Date Columns to Proper Format
@@ -110,18 +117,14 @@ print(dim(covid_data_cleaned))
 Note: Some dates state the year as 19/20 instead of 2019/2020
 ```{r date-conversion}
 # Write code to convert date columns and calculate the difference
+covid_data_cleaned <- covid_data_cleaned %>%
+  mutate(
+    reporting_date = as.Date(sub("(\\d{2})$", "20\\1", reporting.date), format = "%m/%d/%Y"),
+    symptom_onset = as.Date(sub("(\\d{2})$", "20\\1", symptom_onset), format = "%m/%d/%Y"),
+    date_difference = as.numeric(reporting_date - symptom_onset)
+  )
 
-# Ensure the columns have consistent year formatting
-covid_data_cleaned$reporting.date <- as.Date(sub("(\\d{2})$", "20\\1", covid_data_cleaned$reporting.date), format = "%m/%d/%Y")
-covid_data_cleaned$symptom_onset <- as.Date(sub("(\\d{2})$", "20\\1", covid_data_cleaned$symptom_onset), format = "%m/%d/%Y")
-
-# Calculate the difference in days
-covid_data_cleaned$date_difference <- as.numeric(covid_data_cleaned$reporting.date - covid_data_cleaned$symptom_onset)
-
-# View the updated data frame
 head(covid_data_cleaned)
-
-
 ```
 
 ### Step 6: Summary Statistics of Cleaned Data
@@ -131,16 +134,11 @@ head(covid_data_cleaned)
 
 ```{r summary-stats}
 # Write code to generate summary statistics
-# Generate summary statistics for all numeric columns
 numeric_summary <- summary(covid_data_cleaned[sapply(covid_data_cleaned, is.numeric)])
-
-# View the summary statistics
 print(numeric_summary)
 
 # Count cases by gender
 gender_count <- table(covid_data_cleaned$gender)
-
-# View the gender count
 print(gender_count)
 
 ```
@@ -155,26 +153,10 @@ print(gender_count)
 par(mfrow = c(1, 2))  # Split plot area into 1 row and 2 columns
 
 # Histogram
-hist(
-  covid_data_cleaned$age,
-  breaks = 20,
-  main = "Age Distribution",
-  xlab = "Age",
-  col = "skyblue",
-  border = "white",
-  las = 1
-)
+hist(covid_data_cleaned$age,  main = "Age Distribution",  xlab = "Age",  col = "lightblue",  las = 1)
 
 # Bar Plot
-barplot(
-  gender_count,
-  main = "Number of Cases by Gender",
-  xlab = "Gender",
-  ylab = "Number of Cases",
-  col = c("lightpink", "lightblue", "lightgreen"),
-  border = "white",
-  las = 1
-)
+barplot(gender_count, main = "Number of Cases by Gender", xlab = "Gender", ylab = "Number of Cases", col = c("lightpink", "lightblue"),  las = 1)
 
 par(mfrow = c(1, 1))  # Reset plot area to single plot
 
@@ -187,6 +169,14 @@ par(mfrow = c(1, 1))  # Reset plot area to single plot
 
 ```{r filter-data}
 # Write code to filter data and calculate the average age
+
+average_age <- covid_data_cleaned %>%
+  filter(country == "China", recovered == 1) %>%
+  summarize(avg_age = mean(age, na.rm = TRUE)) %>%
+  pull(avg_age)
+
+print(paste("The average age of recovered patients in China is:", round(average_age, 2)))
+
 ```
 
 ## Task 2: Statistical Analysis
