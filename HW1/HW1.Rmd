@@ -200,14 +200,17 @@ ggplot(covid_data, aes(x = gender)) +
 
 ```{r filter-data}
 # Write code to filter data and calculate the average age
-# Filter the dataset for cases from China where the patient has recovered
-recovered_china <- subset(covid_data, country == "China" & recovered == "1")
+
+# Filter for cases from China where the patient has recovered
+recovered_china <- covid_data %>%
+  filter(country == "China" & recovered != "0") %>% # Keep rows where 'country' is China and 'recovered' is not "0"
+  filter(!is.na(age)) # Remove rows with missing 'age'
 
 # Calculate the average age of recovered patients in this subset
 average_age_recovered <- mean(recovered_china$age, na.rm = TRUE)
 
-# Print the average age
-cat("The average age of recovered patients in China is:", average_age_recovered, "\n")
+# Display the result
+cat("The average age of recovered patients from China is:", average_age_recovered, "\n")
 ```
 
 ## Task 2: Statistical Analysis
@@ -242,7 +245,7 @@ Note: Any value other than zero in the "recovered" column means that the patient
 ```{r data-prep}
 # Write code to filter and clean the data
 # Filter the dataset into two groups: recovered and non-recovered patients
-recovered_patients <- subset(covid_data, recovered == "1")
+recovered_patients <- subset(covid_data, recovered != "0")
 non_recovered_patients <- subset(covid_data, recovered == "0")
 
 # Remove rows with missing values only in the 'age' column for both subsets
