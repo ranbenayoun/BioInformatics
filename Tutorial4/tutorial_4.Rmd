@@ -1,0 +1,527 @@
+---
+title: "Differential Gene Expression Analysis"
+author: "Dvir Aran & Almog Angel"
+date: "17/11/2022"
+output: html_document
+---
+
+## Introduction
+
+Differential gene expression (DGE) analysis aim to identify biologically meaningful quantitative changes in gene expression levels between experimental groups. This process helps determine whether observed differences in read counts for specific genes are significant, exceeding what would be expected due to random variation.
+
+Here we will learn how to conduct DGE analysis using DESeq2. DESeq2 is a widely used Bioconductor package that provides robust statistical methods for identifying differentially expressed genes from RNA-Seq data.
+
+## Setting Up the Environment
+
+Before starting the analysis, set the working directory and load the necessary R packages.
+
+```{r setup, message=FALSE, warning=FALSE}
+# Set the working directory
+#setwd('')
+
+# Load required libraries
+library(tidyverse)
+library(DESeq2)
+library(GEOquery)
+library(apeglm)
+library(AnnotationDbi)
+library(org.Hs.eg.db)
+library(EnhancedVolcano)
+library(ReportingTools)
+library(pheatmap)
+library(RColorBrewer)
+```
+
+## Data Acquisition
+
+For this tutorial, we will use RNA-Seq data from the Gene Expression Omnibus (GEO) with accession ID GSE152418.
+
+
+## Downloading Data Using `getGEO`
+
+The `getGEO` function retrieves data from GEO in the form of an **ExpressionSet** object. This object contains multiple slots for handling expression data, metadata, and annotations.
+
+In the GEO database, “series” refers to GEO Series (GSE), which is a collection of samples that belong to a specific experiment or study. Each series contains multiple related GEO Samples (GSM), and it may include data from different experimental conditions, platforms, or replicates.
+
+```{r get-geo-data}
+# Use getGEO to download data
+gse <- getGEO("GSE152418", GSEMatrix = TRUE)
+
+# If the dataset contains multiple series, select the first
+gse <- gse[[1]]
+
+# View the structure of the ExpressionSet
+gse
+```
+
+## Understanding the `ExpressionSet` Structure
+
+The **ExpressionSet** object has the following key components:
+- **Expression Data (`exprs`)**: Contains the gene expression matrix (rows = genes, columns = samples).
+- **Phenotypic Data (`pData`)**: Metadata for samples (e.g., conditions, treatments).
+- **Feature Data (`fData`)**: Information about features (e.g., gene annotations).
+- **Experiment Data (`experimentData`)**: High-level information about the experiment.
+
+Accessing the key slots:
+```{r access-expression}
+# Access expression data
+counts <- exprs(gse)
+dim(counts)  # Dimensions of the expression matrix
+```
+
+```{r access-metadata}
+# Access sample metadata
+metadata <- pData(gse)
+head(metadata)
+```
+
+```{r access-features-data}
+# Access feature data
+features <- fData(gse)
+head(features)
+```
+
+```{r access-experiment-info}
+# View experiment-level metadata
+experimentData(gse)
+```
+
+## Downloading Expression Data from Supplementary Files
+
+While the metadata can be retrieved directly using `getGEO`, the expression data (e.g., raw counts or normalized expression values) is often provided as supplementary files. Here’s how to locate and download the file:
+
+1. Visit the GEO page for the dataset: [GSE152418](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE152418).
+2. Scroll down to the **"Supplementary Files"** section.
+3. Download the relevant file. If you are using DESeq2, make sure this is raw counts (e.g., `GSE152418_p20047_Study1_RawCounts.txt.gz`).
+4. Save the file in your working directory.
+
+Once downloaded, the expression data can be loaded into R as follows:
+
+```{r load-expression-data}
+# Load the raw counts file
+counts <- read.table("GSE152418_p20047_Study1_RawCounts.txt.gz", header = TRUE, sep = "\t", check.names = FALSE)
+
+# Inspect the counts matrix
+dim(counts)
+head(counts)
+```
+
+## `DESeq2`: Inputs Prepration
+
+**Aligning Metadata with Expression Data**
+
+Ensure the metadata matches the expression data for downstream analysis:
+
+```{r align-data}
+# Extract gene identifiers and convert counts to a matrix
+genes <- counts$ENSEMBLID
+counts <- as.matrix(counts[,-1])
+rownames(counts) <- genes
+
+# Align metadata with expression data columns
+metadata <- metadata %>%
+  filter(title %in% colnames(counts))
+counts <- counts[, metadata$title]
+all(metadata$title == colnames(counts))
+rownames(metadata) <- metadata$title
+```
+
+**Subsetting Metadata**
+
+- Use only those features:
+  (*) Disease state
+  (*) Gender
+  (*) Disease severity
+```{r}
+metadata <- metadata %>% 
+  dplyr::select(sample = title, disease = `disease state:ch1`, gender = `gender:ch1`, severity = `severity:ch1`)
+metadata
+```
+
+- Remove "Convalescent" sample
+```{r}
+table(metadata$disease)
+
+samples2keep <- metadata$disease != "Convalescent"
+metadata <- metadata[samples2keep,]
+counts <- counts[,samples2keep]
+
+table(metadata$disease)
+```
+
+**Create a DESeq2 dataset**
+
+With the metadata and expression data aligned, you can proceed with generating a `DESeq2` object.
+
+```{r create-deseq2-dataset}
+dds <- DESeqDataSetFromMatrix(
+  countData = counts,
+  colData = metadata,
+  design = ~ disease
+)
+```
+
+
+## `DESeq2`: Internal Steps and Explanations
+### 1) Estimation of Size Factors (Library Normalization)
+
+DESeq2 applies a special type of normalization that account for:
+a. Differences in **library sizes** 
+b. Differences in **library composition** 
+
+Therefore, it is essential to use raw gene expression count data (not normalized formats like TPM, RPKM, or FPKM) when using DESeq2.
+
+*a. Library Size Normalization*
+
+Normalization accounts for variations in the total number of reads per sample.
+
+- Visualizing Library Sizes
+```{r visualize-library-sizes}
+barplot(colSums(counts(dds)), names = colnames(dds), las = 2)
+title("Barplot of Library Sizes")
+```
+
+- Illustrating Differences in Library Sizes
+```{r library-size-example}
+example_counts <- cbind(c(30, 4, 90, 321, 5), c(60, 12, 170, 644, 10))
+colnames(example_counts) <- c("Sample_1", "Sample_2")
+rownames(example_counts) <- paste0("Gene_", seq(1:5))
+example_counts
+colSums(example_counts)
+```
+
+*b. Library Composition Normalization*
+
+Normalization accounts for skew distribution of gene counts across samples
+
+**Example: Visualizing Library Composition Differences**
+```{r library-composition-example}
+example_counts <- cbind(c(2, 4, 6, 40, 12), c(10, 12, 20, 0, 22))
+colnames(example_counts) <- c("Control", "Gene_4_KO")
+rownames(example_counts) <- paste0("Gene_", seq(1:5))
+example_counts
+colSums(example_counts)
+```
+
+**How does DESeq2 normalize?**
+
+- DESeq2 calculates size factors for each sample, which scale the raw counts to correct for differences in library size and composition.
+
+```{r estimate-size-factors}
+dds <- estimateSizeFactors(dds)
+dds$sizeFactor
+```
+
+### 2) Estimation of Gene-Wise Dispersion
+
+**Possible Statistical Distributions:**
+- **Binomial Distribution:** Used when the number of trials is fixed, and you are counting successes (e.g., coin tosses).
+- **Poisson Distribution:** Assumes events are rare, with the mean equal to the variance.
+- **Negative Binomial Distribution:** Accounts for overdispersion (variance > mean), making it suitable for RNA-Seq data.
+
+**Checking Variance vs. Mean:**
+```{r mean-variance-check}
+mean_counts <- apply(counts, 1, mean)
+variance_counts <- apply(counts, 1, var)
+df <- data.frame(mean_counts, variance_counts)
+
+ggplot(df) +
+  geom_point(aes(x = mean_counts, y = variance_counts)) +
+  scale_y_log10(limits = c(1, 1e9)) +
+  scale_x_log10(limits = c(1, 1e9)) +
+  geom_abline(intercept = 0, slope = 1, color = "red")
+```
+
+
+**Why Negative Binomial?**
+RNA-Seq data often shows greater variability than expected under a Poisson model. The Negative Binomial (NB) distribution accommodates this variability.
+
+**Why estimate dispersion?**
+Dispersion accounts for the variability of RNA-Seq data across replicates. Accurately estimating dispersion is critical to fitting the correct statistical model.
+
+**Visualizing the Negative Binomial Distribution:**
+```{r plot-negative-binomial}
+plot_negbinom_hist <- function(mean, dispersion, n = 1000) {
+  size <- mean^2 / (dispersion - mean)
+  prob <- size / (size + mean)
+  data <- rnbinom(n, size, prob)
+  hist(data, breaks = 100, col = "skyblue",
+       main = paste("Negative Binomial Distribution\nMean:", mean, ", Dispersion:", dispersion),
+       xlab = "Count", ylab = "Frequency")
+}
+
+plot_negbinom_hist(mean = 10, dispersion = 20)
+plot_negbinom_hist(mean = 2, dispersion = 50)
+```
+
+**DESeq2's Dispersion Estimation:**
+```{r estimate-dispersions}
+dds <- estimateDispersions(dds)
+plotDispEsts(dds)
+```
+
+### 3) Wald Test for Differential Expression
+
+DESeq2 uses the Wald test to identify differentially expressed genes between conditions.
+
+**Run the Wald Test:**
+```{r wald-test}
+dds <- nbinomWaldTest(dds)
+```
+
+### Running DESeq2 in a single command
+
+- If you want to run DESeq2 from start to end in a single command
+```{r}
+dds <- DESeq(dds)
+```
+
+
+## `DESeq2`: Processing and Interpretation of Results
+
+### 1) Retrieve Differential Expression Results
+
+Extract the results of the differential expression analysis:
+```{r results}
+res <- results(dds)
+head(res)
+```
+
+**What Do the Columns in `res` Mean?**
+
+The resulting object contains several columns that provide statistical and biological information about the differential expression analysis. Here's what each column represents:
+
+1. **baseMean**  
+- The average of the normalized counts for a gene across all samples.  
+- Useful to assess the overall expression level of the gene.  
+
+2. **log2FoldChange**  
+- The log2 ratio of expression levels between the comparison groups.  
+- Positive values indicate upregulation, while negative values indicate downregulation.  
+
+3. **lfcSE**  
+- The standard error of the log2 fold change estimate.  
+- Reflects the uncertainty in the estimated fold change.  
+
+4. **stat**  
+- The Wald statistic, calculated as `log2FoldChange / lfcSE`.  
+- This measures how strongly a gene's expression differs between the groups, relative to the variability in the data.  
+
+5. **pvalue**  
+- The raw p-value for the null hypothesis that the gene is not differentially expressed.  
+- Indicates the significance of the observed difference without accounting for multiple testing.  
+
+6. **padj**  
+- The adjusted p-value, corrected for multiple testing using the Benjamini-Hochberg procedure.  
+- Helps control the false discovery rate (FDR) and is more reliable for determining significance.
+
+
+### 2) Counting Significant Genes
+
+Let's check how many genes are considered significant based on raw p-values:
+```{r significant-raw-pvalues}
+sig_genes <- rownames(res)[which(res$pvalue < 0.05)]
+length(sig_genes)
+print(paste0(length(sig_genes) / nrow(res) * 100, "%"))
+```
+
+> **Are all these genes truly significant?**  
+(!) NO, because raw p-values do not account for multiple testing corrections.
+
+**Using Adjusted P-values**
+To account for multiple testing, we use adjusted p-values (padj):
+```{r significant-adjusted-pvalues}
+sig_adjusted_genes <- rownames(res)[which(res$padj < 0.05)]
+length(sig_adjusted_genes)
+print(paste0(length(sig_adjusted_genes) / nrow(res) * 100, "%"))
+```
+
+**Observation:**  
+Using adjusted p-values reduces the number of significant genes, but there may still be too many to interpret effectively.
+
+
+### 3) Filtering Based on Log Fold Change (LFC)
+
+**What is LFC?**  
+LFC (Log Fold Change) is calculated as:  
+`LFC = log2 (normalized_counts_group1 / normalized_counts_group2)`
+
+(!) **Problem:** LFC can be sensitive to small values, especially for lowly expressed genes.
+
+**Investigating LFC and Mean Expression**
+Visualize the relationship between LFC and mean expression using an MA plot:
+```{r ma-plot}
+plotMA(res)
+```
+
+**Shrinking Log Fold Changes**
+
+Shrinking the log fold changes helps stabilize estimates for low-expression genes and reduces noise.
+
+Before shrinking, identify the coefficient of the analysis to shrink:
+```{r get-results-names}
+resultsNames(dds)
+```
+
+Use the `lfcShrink` function with the **apeglm** method:
+```{r shrink-lfc}
+resLFC <- lfcShrink(dds, coef = "disease_Healthy_vs_COVID.19", type = "apeglm")
+plotMA(resLFC)
+```
+
+
+### 4) Annotating Results with Gene Symbols
+
+To make the results more interpretable, map gene symbols to ENSEMBL gene IDs using annotation packages.
+
+
+**Map Gene Symbols**
+```{r map-gene-symbols}
+resLFC$symbol <- mapIds(org.Hs.eg.db,
+                        keys = rownames(resLFC),
+                        column = "SYMBOL",
+                        keytype = "ENSEMBL",
+                        multiVals = "first")
+head(resLFC)
+```
+
+
+### 5) Ordering and Saving Results
+
+**Order Results by P-value**
+```{r order-results}
+resOrdered <- resLFC[order(resLFC$pvalue), ]
+head(resOrdered)
+```
+
+**Save Results to a CSV File**
+```{r save-results}
+write.csv(resOrdered, "signif_results.csv")
+```
+
+
+## `DESeq2`: Results Visualizations
+
+### 1) Individual Genes
+
+**Inspecting an Individual Gene**
+Start by focusing on a specific gene, for example, `TK1`:
+```{r inspect-individual-gene}
+i <- which(resOrdered$symbol == 'TK1')
+resOrdered[i, ]
+```
+
+**Extract Normalized Values for the Gene**
+Use the `plotCounts()` function to retrieve normalized expression values for `TK1`:
+```{r extract-normalized-values}
+d <- plotCounts(dds, gene = rownames(resOrdered)[i], intgroup = "disease", returnData = TRUE)
+d
+```
+
+**Visualization with Base R**
+Visualize the counts using a simple boxplot:
+```{r base-r-boxplot}
+boxplot(count ~ disease, data = d)
+```
+
+**Visualization with ggplot2**
+Create a more polished plot using `ggplot2`:
+```{r ggplot2-boxplot}
+library(ggplot2)
+ggplot(d, aes(disease, count)) +
+  geom_boxplot(aes(fill = disease)) +
+  ggtitle("TK1")
+```
+
+**Boxplot with Adjusted P-value Annotation**
+
+Add the adjusted p-value from the `res` results to the plot title:
+```{r ggplot2-boxplot-with-padj}
+library(hrbrthemes) # ggplot2 themes
+library(viridis) # color palettes
+
+# Retrieve the adjusted p-value for TK1
+padj <- resOrdered[i, "padj"]
+
+# Create the boxplot with annotation
+ggplot(d, aes(x = disease, y = count, fill = disease)) +
+  geom_boxplot() +
+  scale_fill_viridis(discrete = TRUE, alpha = 0.6) +
+  geom_jitter(color = "black", size = 2, alpha = 0.9) +
+  theme_classic() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 11)
+  ) +
+  ggtitle(paste("TK1", "\nAdjusted p-value:", signif(padj, digits = 3))) +
+  xlab("Treatment") +
+  ylab("Normalized Counts")
+```
+
+
+### 2) Reporting Results for All Genes
+
+Generate a detailed HTML report for all genes:
+```{r create-html-report}
+library(ReportingTools)
+dds.symbol <- dds
+rownames(dds.symbol) <- mapIds(org.Hs.eg.db,
+                               keys = rownames(dds),
+                               column = "SYMBOL",
+                               keytype = "ENSEMBL",
+                               multiVals = "first")
+rownames(dds.symbol)[is.na(rownames(dds.symbol))] <- rownames(dds)[is.na(rownames(dds.symbol))]
+rownames(dds.symbol) <- make.unique(rownames(dds.symbol))
+
+des2Report <- HTMLReport(
+  shortName = 'RNAseq_analysis_with_DESeq2',
+  title = 'RNA-seq Analysis of Differential Expression using DESeq2',
+  reportDirectory = "./reports"
+)
+
+publish(dds.symbol, des2Report, pvalueCutoff = 0.000000000000001,
+        annotation.db = NULL, factor = colData(dds.symbol)$disease,
+        reportDir = "./reports")
+finish(des2Report)
+```
+
+
+### 3) Multiple Genes Visualization
+
+**Volcano Plot**
+Use a volcano plot to visualize fold changes and significance:
+```{r volcano-plot}
+EnhancedVolcano(resOrdered,
+                lab = resOrdered$symbol,
+                x = 'log2FoldChange',
+                y = 'padj',
+                labSize = 3,
+                FCcutoff = 2)
+```
+
+**Heatmap**
+Visualize multiple genes using a heatmap:
+```{r heatmap}
+library(pheatmap)
+
+# Select top upregulated and downregulated genes
+selectUp <- resOrdered$symbol[resOrdered$log2FoldChange > 0][1:10]
+selectDown <- resOrdered$symbol[resOrdered$log2FoldChange < 0][1:10]
+select <- c(selectUp, selectDown)
+
+# Prepare annotation data
+df <- data.frame(row.names = colnames(dds.symbol),
+                 disease = colData(dds.symbol)$disease,
+                 severity = colData(dds.symbol)$severity,
+                 gender = colData(dds.symbol)$gender)
+
+# Retrieve normalized counts
+normcounts <- assay(vst(dds.symbol, blind = TRUE))
+
+# Generate the heatmap
+pheatmap(normcounts[select, ], cluster_rows = TRUE,
+         show_colnames = FALSE, cluster_cols = TRUE,
+         annotation_col = df, scale = 'row',
+         cutree_cols = 2, cutree_rows = 2)
+```
+

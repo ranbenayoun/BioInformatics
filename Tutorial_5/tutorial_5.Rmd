@@ -1,0 +1,601 @@
+---
+title: "Differential Gene Expression Analysis - Part 2"
+author: "Almog Angel"
+date: "11/12/2024"
+output: html_document
+---
+
+## Overview
+
+In this tutorial, we will:  
+1. Load the count matrix and metadata.  
+2. Perform differential gene expression (DGE) analysis using DESeq2.  
+3. Visualize results with volcano plots, heatmaps, and PCA.  
+4. Explore clustering and correlation between samples.  
+5. Handle more complex experimental designs.  
+6. Conduct Gene Set Enrichment Analysis (GSEA).  
+
+---
+
+## Setup  
+
+#### Load Required Packages  
+```{r}
+# Set the working directory and load necessary packages
+setwd('~/Documents/intro_to_bioinformatics/winter2425/tutorial_5/')
+library(DESeq2)
+library(tidyverse)
+library(GEOquery)
+library(AnnotationDbi)
+library(org.Hs.eg.db)
+library(EnhancedVolcano)
+library(pheatmap)
+library(clusterProfiler)
+library(msigdbr)
+library(gridExtra)
+library(factoextra)
+library(dendextend)
+library(plotly)
+```
+
+
+## 1. Load Data  
+
+#### Load Counts and Metadata  
+```{r}
+# Load RNA-Seq count matrix
+counts <- read.table("../tutorial_4/GSE152418_p20047_Study1_RawCounts.txt.gz", 
+                     stringsAsFactors = FALSE, sep = '\t', 
+                     header = TRUE, check.names = FALSE)
+
+# Load metadata from GEO series matrix file
+gse <- getGEO(filename = "../tutorial_4/GSE152418_series_matrix.txt") 
+
+# Create a clean metadata table
+metadata <- as_tibble(gse) %>% 
+  dplyr::select(sample = title, disease = disease.state.ch1, 
+                gender = gender.ch1, severity = severity.ch1) %>% 
+  mutate(disease = ifelse(disease == "Convalescent", "COVID-19", disease)) %>% 
+  mutate(disease = factor(disease, levels = c('Healthy', 'COVID-19')))
+
+# Ensure metadata samples match column names in counts matrix
+all(metadata$sample == colnames(counts)[-1])
+```
+
+## 2. Create DESeq2 Object and Run Analysis  
+
+```{r}
+# Create DESeq2 object
+dds <- DESeqDataSetFromMatrix(countData = counts,
+                              colData = metadata,
+                              design = ~disease,
+                              tidy = TRUE)
+
+# Run DESeq2 differential expression analysis
+dds <- DESeq(dds)
+
+# Shrink Log2 Fold Change values using apeglm
+resLFC <- lfcShrink(dds, coef = "disease_COVID.19_vs_Healthy", type = "apeglm")
+
+# Add gene symbols to results
+resLFC$symbol <- mapIds(org.Hs.eg.db,
+                        keys = rownames(resLFC),
+                        column = "SYMBOL",
+                        keytype = "ENSEMBL",
+                        multiVals = "first")
+
+# Order results by p-value
+resOrdered <- resLFC[order(resLFC$pvalue),]
+
+# Create DESeq2 object with gene symbols instead of ENSEMBL IDs
+dds.symbol <- dds
+rownames(dds.symbol) <- mapIds(org.Hs.eg.db,
+                               keys = rownames(dds),
+                               column = "SYMBOL",
+                               keytype = "ENSEMBL",
+                               multiVals = "first")
+rownames(dds.symbol)[is.na(rownames(dds.symbol))] <- rownames(dds)[is.na(rownames(dds.symbol))]
+rownames(dds.symbol) <- make.unique(rownames(dds.symbol))
+```
+
+
+## 3. Results Visualization  
+
+### Volcano Plot  
+```{r}
+EnhancedVolcano::EnhancedVolcano(resOrdered,
+                lab = resOrdered$symbol,
+                x = 'log2FoldChange',
+                y = 'padj',
+                labSize = 3,
+                FCcutoff = 2)
+```
+
+### Heatmap  
+```{r}
+# Select top 10 upregulated and downregulated genes
+selectUp <- resOrdered$symbol[resOrdered$log2FoldChange > 0][1:10]
+selectDown <- resOrdered$symbol[resOrdered$log2FoldChange < 0][1:10]
+select <- c(selectUp, selectDown)
+
+# Prepare annotation data
+df <- data.frame(row.names = colnames(dds.symbol),
+                 disease = colData(dds.symbol)$disease,
+                 severity = colData(dds.symbol)$severity,
+                 gender = colData(dds.symbol)$gender)
+
+# Get normalized counts
+normcounts <- assay(vst(dds.symbol, blind = TRUE))
+
+# Plot heatmap
+pheatmap::pheatmap(normcounts[select,], cluster_rows = TRUE,
+                   show_colnames = FALSE, cluster_cols = TRUE, 
+                   annotation_col = df, scale = 'row', 
+                   cutree_cols = 2, cutree_rows = 2)
+```
+
+### PCA Visualization  
+
+Principal Component Analysis (PCA) is a dimensionality reduction technique that helps us summarize the variance in a dataset.  
+- PCA transforms the data into new dimensions called **Principal Components (PCs)**.  
+- **PC-1** explains the largest variance in the data, followed by **PC-2**, **PC-3**, and so on.  
+- By visualizing the data in the first few PCs, we can explore patterns, clusters, or outliers.  
+- In gene expression analysis, PCA helps us observe how samples group based on their overall expression profiles.  
+
+#### Steps for PCA Visualization
+
+```{r}
+# Select top 1000 most variable genes
+var_per_gene <- apply(normcounts, 1, var)  # Calculate variance for each gene
+selectedGenes <- names(var_per_gene[order(var_per_gene, decreasing = TRUE)][1:1000])  # Top 1000 variable genes
+normcounts.top1Kvar <- t(normcounts[selectedGenes,])  # Transpose to make samples as rows
+
+# Perform PCA
+pcaResults <- prcomp(normcounts.top1Kvar, scale. = TRUE)  # Scale the data for PCA
+```
+
+#### 2D PCA Plot with Explained Variance
+
+```{r}
+# Calculate percentage of variance explained by PCs
+percentVar <- round(100 * (pcaResults$sdev^2 / sum(pcaResults$sdev^2)), 2)
+
+# Plot PCA with ggplot2
+pcaData <- as.data.frame(pcaResults$x)
+pcaData$disease <- dds$disease  # Add disease metadata
+
+ggplot(pcaData, aes(x = PC1, y = PC2, color = disease)) +
+  geom_point(size = 3) +
+  labs(title = "PCA of Top 1000 Variable Genes",
+       x = paste0("PC1 (", percentVar[1], "% Variance)"),
+       y = paste0("PC2 (", percentVar[2], "% Variance)")) +
+  theme_minimal()
+```
+
+Another way to plot the PCA is to use an internal DESeq2 function:
+```{r}
+plotPCA(vst(dds.symbol,blind=T), ntop=1000, intgroup=c('disease','severity'))
+```
+
+#### Understanding Principal Components  
+- PC1 separates samples based on the largest variation in the dataset.  
+- PC2 is orthogonal to PC1 and explains the second-largest variance.  
+- Together, PC1 and PC2 often capture a significant proportion of the total variance.  
+- Subsequent PCs (e.g., PC3, PC4) capture less variance but may reveal subtler patterns.  
+
+#### 3D PCA Plot
+
+```{r}
+# Create a 3D PCA plot
+p <- plot_ly(pcaData, 
+             x = ~PC1, 
+             y = ~PC2, 
+             z = ~PC3, 
+             color = ~disease,
+             colors = c('blue', 'red'),
+             type = "scatter3d", 
+             mode = "markers") %>%
+     layout(title = "3D PCA Plot of Top 1000 Variable Genes",
+            scene = list(
+              xaxis = list(title = paste0("PC1 (", percentVar[1], "% Variance)")),
+              yaxis = list(title = paste0("PC2 (", percentVar[2], "% Variance)")),
+              zaxis = list(title = paste0("PC3 (", percentVar[3], "% Variance)"))
+            ))
+
+# Display the plot
+p
+```
+
+## 4.1. Correlations  
+
+Correlation measures how strongly two variables (e.g., gene expression values across samples) are related.  
+- A **positive correlation** means that as one variable increases, the other tends to increase as well.  
+- A **negative correlation** means that as one variable increases, the other tends to decrease.  
+- Correlation values range from -1 to 1:  
+  - **1**: Perfect positive correlation.  
+  - **0**: No correlation (variables are unrelated).  
+  - **-1**: Perfect negative correlation.  
+
+Correlations are commonly used to understand similarities between genes or samples in datasets.  
+
+### Correlation Between Two Samples  
+Let's start by comparing the expression levels of two samples.  
+
+```{r}
+# Plot the expression values of two samples
+plot(normcounts[,1], normcounts[,2], 
+     main = "Gene Expression Correlation Between Two Samples", 
+     xlab = "Sample 1 Expression", 
+     ylab = "Sample 2 Expression")
+```
+
+- If the points form a diagonal line (upwards or downwards), the samples are strongly correlated.  
+- A scattered cloud of points indicates weak or no correlation.  
+
+```{r}
+# Calculate correlation coefficient
+cor(normcounts[,1], normcounts[,2])  # Overall correlation
+cor(normcounts[selectedGenes,1], normcounts[selectedGenes,2])  # Correlation for top variable genes
+```
+
+
+### Correlation Matrix for All Samples  
+A **correlation matrix** shows the correlation coefficients between all pairs of samples.  
+```{r}
+# Compute correlation matrix
+correlationMatrix <- cor(normcounts[selectedGenes,])
+head(correlationMatrix)  # View the first few rows
+```
+
+To visualize this, we can use a heatmap:  
+```{r}
+# Visualize correlation matrix with pheatmap
+pheatmap::pheatmap(correlationMatrix,  
+                   annotation_col = df, 
+                   cutree_cols = 3, cutree_rows = 3, 
+                   show_colnames = FALSE, show_rownames = FALSE,
+                   main = "Sample Correlation Heatmap")
+```
+
+
+
+### Comparing Correlation to Other Metrics  
+Correlation is one way to measure similarity, but we can also use other metrics like Euclidean distance.  
+- **Euclidean Distance** considers the actual difference in values, while correlation looks at the shape of the relationship.  
+
+```{r}
+# Compute distance matrix using Euclidean distance
+sampleDists <- dist(t(normcounts[selectedGenes,]))
+sampleDistMatrix <- as.matrix(sampleDists)
+
+# Visualize distance matrix with pheatmap
+pheatmap::pheatmap(sampleDistMatrix,  
+                   annotation_col = df, 
+                   cutree_cols = 3, cutree_rows = 3, 
+                   show_colnames = FALSE, show_rownames = FALSE,
+                   main = "Sample Distance Heatmap")
+```
+
+
+## 4.2 Clustering  
+
+Clustering is an unsupervised learning technique used to group similar samples together based on their features (genes in our case).In this section, we will explore two popular clustering techniques:  
+- **Hierarchical Clustering**: Builds a tree-like structure (dendrogram) to show relationships between clusters.  
+- **K-means Clustering**: Divides samples into a predefined number of clusters (`k`) based on similarity.  
+
+### Hierarchical Clustering  
+
+Hierarchical clustering is performed in two main steps:  
+1. **Calculate a distance matrix**: Compute the pairwise distance (or dissimilarity) between samples.  
+2. **Linkage**: Merge samples or clusters based on their distance using a specific method (e.g., average or complete linkage).  
+
+#### Step 1: Compute Distance Matrix  
+The first step in hierarchical clustering is to calculate the distance between samples. Common distance metrics include:  
+- **Euclidean Distance**: The straight-line distance between two points.  
+- **Manhattan Distance**: The sum of absolute differences between coordinates.  
+- **Correlation Distance**: Measures similarity in terms of their trends or patterns, regardless of their actual values.
+
+```{r}
+# Make sample names informative
+rownames(normcounts.top1Kvar) <- paste0(metadata$disease, "_", metadata$severity, "_", metadata$gender, "_", seq(1:nrow(normcounts.top1Kvar)))  
+
+# Calculate Euclidean distance matrix for the top 1000 most variable genes
+dist_mat <- dist(normcounts.top1Kvar, method = "euclidean")
+```
+
+#### Step 2: Perform Hierarchical Clustering  
+After computing the distance matrix, we can cluster the samples using different linkage methods:  
+- **Single Linkage**: Smallest distance between any two samples in the clusters.  
+- **Complete Linkage**: Largest distance between any two samples.  
+- **Average Linkage**: Mean distance between all pairs of samples in two clusters.  
+- **Ward's Method**: Minimizes the total variance within clusters.  
+
+```{r}
+# Perform hierarchical clustering using Average Linkage
+hclust_avg <- hclust(dist_mat, method = "average")
+
+# Perform hierarchical clustering using Ward's Method
+hclust_ward <- hclust(dist_mat, method = "ward.D")
+```
+
+#### Step 3: Visualize Dendrogram  
+Dendrograms are tree-like diagrams that show the clustering process.  
+```{r}
+# Plot dendrogram for Average Linkage
+plot(hclust_avg, cex = 0.6, hang = -1, main = "Average Linkage Dendrogram")
+
+# Add cluster rectangles (e.g., k = 2 clusters)
+rect.hclust(hclust_avg, k = 2, border = "red")
+
+# Plot dendrogram for Ward's Method
+plot(hclust_ward, cex = 0.6, hang = -1, main = "Ward's Method Dendrogram")
+
+# Add cluster rectangles (e.g., k = 3 clusters)
+rect.hclust(hclust_ward, k = 3, border = "blue")
+```
+
+#### Comparing Dendrograms  
+Compare different linkage methods to see how clustering changes:  
+```{r}
+# Convert dendrograms to dendextend objects
+dend_avg <- as.dendrogram(hclust_avg)
+dend_ward <- as.dendrogram(hclust_ward)
+
+# Compare using a tanglegram
+tanglegram(dend_avg, dend_ward,
+           common_subtrees_color_lines = TRUE,
+           highlight_distinct_edges = TRUE,
+           main_left = "Average Linkage",
+           main_right = "Ward's Method")
+```
+
+### K-means Clustering  
+
+K-means clustering divides samples into `k` clusters.  
+- **Goal**: Minimize the distance between samples and their assigned cluster centroid.  
+- **Centroid**: The center point of a cluster, recalculated iteratively as the mean of all samples in the cluster.  
+
+#### Choosing the Number of Clusters (`k`)  
+The number of clusters, `k`, must be defined in advance. Methods to select `k` include:  
+- **Elbow Method**: Plot the within-cluster sum of squares (WSS) for different `k` values. Look for an "elbow" point where the WSS stops decreasing significantly.  
+- **Silhouette Score**: Measures how well samples are assigned to their clusters. Higher scores indicate better clustering.  
+
+```{r}
+# Determine the optimal number of clusters using the Elbow Method
+fviz_nbclust(normcounts.top1Kvar, FUN = kmeans, method = "wss")
+```
+
+#### Perform K-means Clustering  
+```{r}
+# Run K-means clustering with k = 3
+kmeans_out <- kmeans(normcounts.top1Kvar, centers = 3, nstart = 25)
+
+# Visualize clusters
+fviz_cluster(kmeans_out, data = normcounts.top1Kvar) +
+  ggtitle("K-means Clustering (k = 3)")
+```
+
+#### Compare Results for Different `k` Values  
+```{r}
+# Run K-means for different values of k
+kmeans_out2 <- kmeans(normcounts.top1Kvar, centers = 2, nstart = 25)
+kmeans_out4 <- kmeans(normcounts.top1Kvar, centers = 4, nstart = 25)
+
+# Plot results
+p1 <- fviz_cluster(kmeans_out2, data = normcounts.top1Kvar) + ggtitle("k = 2")
+p2 <- fviz_cluster(kmeans_out, data = normcounts.top1Kvar) + ggtitle("k = 3")
+p3 <- fviz_cluster(kmeans_out4, data = normcounts.top1Kvar) + ggtitle("k = 4")
+
+# Arrange plots side by side
+grid.arrange(p1, p2, p3, nrow = 1)
+```
+
+
+
+## 5. Complex Design  
+
+When working with more complex datasets, we often need to include additional factors or explore the interactions between them.  
+DESeq2 allows us to define **design formulas** that specify the variables and their relationships to be considered in the analysis.  
+
+### Understanding the Design Matrix  
+- The **design matrix** in statistics describes how each variable (factor) contributes to the model.  
+- Variables in the design matrix can represent:  
+  - **Main Effects**: The independent contribution of a variable (e.g., the effect of disease).  
+  - **Interaction Terms**: The combined effect of two variables (e.g., the effect of disease depends on gender).  
+
+In DESeq2, the `design` formula is written in R syntax:  
+- `~ disease`: Includes only the disease variable (main effect).  
+- `~ gender + disease`: Includes the effects of both gender and disease (additive model).  
+- `~ gender * disease`: Includes gender, disease, and their interaction (interaction model).  
+- `~ gender : disease`: Includes only the interaction term without the main effects.
+
+
+### Example 1: Additive Model  
+The additive model includes the main effects of two or more variables but assumes no interaction between them.  
+
+```{r}
+# Define design formula with two factors (additive model)
+dds2 <- DESeqDataSetFromMatrix(countData = counts, 
+                               colData = metadata, 
+                               design = ~ gender + disease,
+                               tidy = TRUE)
+
+# Perform differential expression analysis
+dds2 <- DESeq(dds2)
+
+# resultsNames(dds2)
+
+# Shrink Log2 Fold Changes for disease effect
+res2LFC <- lfcShrink(dds2, coef = "disease_COVID.19_vs_Healthy", type = "apeglm")
+```
+
+**Interpretation:**  
+- The model adjusts for differences in gene expression due to gender before estimating the effect of disease.  
+- This approach is useful when gender might influence the results and needs to be accounted for.  
+
+
+#### Compare LFC for regular vs. complex DESeq2 analysis
+
+Run this in the console:
+```{r}
+plot(resLFC$log2FoldChange, res2LFC$log2FoldChange)
+idx <- identify(resLFC$log2FoldChange,res2LFC$log2FoldChange) # Identify Points in a Scatter Plot
+```
+
+```{r}
+resLFC[idx,]
+res2LFC[idx,]
+```
+
+```{r}
+# ENSG00000282122 - IGHV7-4-1
+g1 <- plotCounts(dds, gene=rownames(resLFC[idx,]), intgroup=c("disease", "gender", "severity"), returnData=TRUE)
+g1$diseaseGender <- paste0(g1$disease, "-", g1$gender)
+ggplot(g1, aes(diseaseGender, count)) +
+  geom_boxplot(aes(fill=disease)) +
+  geom_jitter() +
+  ggtitle("IGHV7-4-1")
+```
+
+
+### Example 2: Interaction Model  
+An interaction model examines how one variable affects the relationship between another variable and the outcome.  
+
+```{r}
+# Define design formula with interaction terms
+dds3 <- DESeqDataSetFromMatrix(countData = counts, 
+                               colData = metadata, 
+                               design = ~ gender * disease,
+                               tidy = TRUE)
+
+# Perform differential expression analysis
+dds3 <- DESeq(dds3)
+
+# resultsNames(dds3)
+
+# Examine results for interaction term
+resInteraction <- results(dds3, name = "genderM.diseaseCOVID.19")
+```
+
+**Interpretation:**  
+- The interaction term `genderMale.diseaseCOVID.19` tests whether the effect of disease is different for males compared to females.
+- Interaction models are useful for exploring conditional effects or testing hypotheses about variable interactions.  
+
+
+### Writing the Design Formula  
+The design formula in DESeq2 should include all relevant variables and interactions based on your study design.  
+- **Order Matters**: Variables are evaluated in the order they are written.  
+
+Examples:  
+- `~ disease`: Single-factor analysis.  
+- `~ gender + disease`: Adjust for gender while testing for disease effects.  
+- `~ gender * disease`: Include both main effects and their interaction.  
+- `~ gender + severity + disease`: Adjust for both gender and severity.  
+
+
+### Checking Results  
+Use the `resultsNames()` function to list all available coefficients from the model:  
+```{r}
+# List coefficients
+resultsNames(dds3)
+```
+
+
+### Key Takeaways  
+- Use **additive models** when you want to adjust for multiple variables.  
+- Use **interaction models** to explore relationships between variables.  
+- Always write the design formula carefully to match your study question.  
+- Check the `resultsNames()` output to ensure you’re interpreting the correct coefficients.  
+
+## 6. Gene Set Enrichment Analysis (GSEA)  
+
+Gene Set Enrichment Analysis (GSEA) is a method used to identify whether predefined gene sets show significant differences in expression between two conditions.  
+- Instead of analyzing individual genes, GSEA focuses on groups of genes that share common biological functions, pathways, or other annotations.  
+- This approach helps identify underlying biological mechanisms driving the observed changes in gene expression.  
+
+
+### Steps in GSEA  
+1. **Create an ordered gene list**: Rank genes by their differential expression (e.g., log2 fold change).  
+2. **Define gene sets**: Use predefined collections of genes representing biological pathways (e.g., Hallmark gene sets).  
+3. **Run enrichment analysis**: Test whether genes in each set are disproportionately represented at the top (or bottom) of the ordered list.  
+4. **Visualize results**: Use plots to interpret enriched pathways.  
+
+
+### Step 1: Create an Ordered Gene List  
+
+```{r}
+# Add gene symbols to results
+res2LFC$symbol <- mapIds(org.Hs.eg.db,
+                        keys = rownames(resLFC),
+                        column = "SYMBOL",
+                        keytype = "ENSEMBL",
+                        multiVals = "first")
+
+# Create an ordered vector of genes by log2FoldChange
+genes_ordered <- res2LFC %>%
+  as_tibble() %>%
+  select(log2FoldChange, symbol) %>%
+  drop_na() %>%
+  arrange(-log2FoldChange) %>%  # Rank genes in descending order of log2FC
+  pull(log2FoldChange, name = symbol)
+```
+
+
+### Step 2: Define Gene Sets  
+We will use the **Hallmark gene sets** from the `msigdbr` package, which represent well-defined biological processes.  
+
+```{r}
+# Load Hallmark pathways
+hallmarks <- msigdbr(species = "Homo sapiens", category = "H") %>% 
+  dplyr::select(gs_name, gene_symbol)  # Select pathway name and associated genes
+hallmarks
+```
+
+
+### Step 3: Run GSEA  
+Perform GSEA using the `GSEA()` function from the `clusterProfiler` package.  
+
+```{r}
+# Run GSEA
+names(genes_ordered) <- make.unique(names(genes_ordered)) # Make gene names unique
+gsea_results <- GSEA(genes_ordered, TERM2GENE = hallmarks, pvalueCutoff = 0.05)
+```
+
+**Parameters in GSEA:**  
+- `genes_ordered`: The ranked gene list.  
+- `TERM2GENE`: A data frame linking pathways (terms) to genes.  
+- `pvalueCutoff`: Filters results to include only significantly enriched pathways.  
+
+
+### Step 4: Visualize GSEA Results  
+Visualize the enriched pathways using a dot plot:  
+
+```{r}
+# Dot plot visualization
+dotplot(gsea_results, showCategory = 10, title = "Top 10 Enriched Pathways") +
+  theme_minimal()
+```
+
+**Dot Plot Interpretation:**  
+- The size of the dots represents the number of genes in the pathway.  
+- The color represents the adjusted p-value (darker colors = more significant).  
+
+### Step 5: Explore Results  
+Investigate specific pathways of interest. For example, to examine the enrichment plot for a particular pathway:  
+
+```{r}
+# Enrichment plot for a specific pathway
+enrichplot::gseaplot2(gsea_results, geneSetID = "HALLMARK_OXIDATIVE_PHOSPHORYLATION")
+```
+
+**Interpretation of Enrichment Plot:**  
+- **X-axis**: Genes ranked by log2 fold change.  
+- **Y-axis**: Enrichment score showing the cumulative overlap with the pathway.  
+- A peak indicates where most genes from the pathway are concentrated in the ranked list.  
+
+
+### Key Takeaways  
+- GSEA provides pathway-level insights into differential gene expression, revealing biological processes that might be driving the observed changes.  
+- Use well-curated gene sets, such as the Hallmark pathways, for more robust results.  
+- Visualizations like dot plots and enrichment plots help interpret enriched pathways effectively.  
+- Always review the ranked gene list and enrichment scores critically to ensure biological relevance.  

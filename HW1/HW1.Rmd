@@ -1,6 +1,6 @@
 ---
 title: "Homework 1"
-author: "<206078974>_<ID2>"
+author: "<206078974>_<315831321>"
 date: "`r Sys.Date()`"
 output: html_document
 ---
@@ -10,14 +10,17 @@ In the following tasks you will use statistics and sequence alignment to analyze
 - Load packages
 ```{r message=TRUE, warning=TRUE, include=FALSE}
 library(tidyverse)
+library(ggplot2)
 library(Biostrings)
 library(msa)
 library(msaR)
+library(ggpubr) # For adding the p-value annotation
+library(seqinr)
 ```
 
 - Set your working directory
 ```{r include=FALSE}
-setwd("C:/Users/ranbe/OneDrive - Technion/טכניון/לימודים/תואר שני/ביואינפורמטיקה/HW1")
+#setwd("HW1")
 ```
 
 
@@ -41,10 +44,12 @@ covid_data <- read.csv("COVID19_line_list_data.csv")
 
 ```{r dataset-overview}
 # Write code to find the dimensions and column names
-dim <- dim(covid_data)
-dim 
-col_names <- colnames(covid_data)
-col_names
+dataset_dimensions <- dim(covid_data)
+column_names <- colnames(covid_data)
+
+cat("The dataset has", dataset_dimensions[1], "rows and", dataset_dimensions[2], "columns.\n")
+cat("The column names are:\n")
+print(column_names)
 ```
 
 ### Step 3: Identify Missing Data
@@ -54,8 +59,6 @@ col_names
 
 ```{r missing-data}
 # Write code to calculate and visualize missing data
-# Load necessary library
-library(ggplot2)
 
 # Calculate the percentage of missing values for each column in covid_data
 missing_percentage <- colSums(is.na(covid_data)) / nrow(covid_data) * 100
@@ -193,8 +196,12 @@ Before running the test, answer the following in free text:
 4. **How do we assess the normality of the data?**  
 5. **How should the test statistics and p-value be interpreted?**
 
-**Write your answers here as free text:**
-
+**Write your answers here as free text:** <br />
+1. Null Hypothesis(H_0): there is no significant difference between the average age of patients who recovered and the patients who didn't recover.<br />
+2. Alternative Hypothesis (H_1): there is a difference between the average age of the patients who recovered and those who didn't. <br />
+3. Age is numerical, and recovery is categorical (healthy/sick is 0/1). <br />
+4. We can preform a statistical test such as Shapiro-Wilk or try to assess visually from the distribution. <br />
+5. For a high t-statistic, and a low p-value (less than 0.025 as we do two-sided) will reject the null hypothesis and say there is a difference between the age of the recovered. else, we can't reject the hypothesis and we can't say there is a difference.
 
 ### Step 2: Data Preparation
 
@@ -204,6 +211,24 @@ Note: Any value other than zero in the "recovered" column means that the patient
 
 ```{r data-prep}
 # Write code to filter and clean the data
+# Remove rows with missing values in the `age` column and filter into two groups
+covid_data_cleaned <- covid_data_cleaned %>%
+  drop_na(age) %>%  
+  mutate(
+    group = if_else(recovered != 0, "Recovered", "Non-Recovered")
+  )
+
+# Split into two separate data frames
+recovered_patients <- covid_data_cleaned %>%
+  filter(group == "Recovered")
+
+non_recovered_patients <- covid_data_cleaned %>%
+  filter(group == "Non-Recovered")
+
+# View the datasets
+head(covid_data_cleaned)
+head(recovered_patients)
+head(non_recovered_patients)
 ```
 
 ### Step 3: Assess Normality
@@ -212,17 +237,53 @@ Note: Any value other than zero in the "recovered" column means that the patient
 
 ```{r normality-test}
 # Write code to assess normality
+# Plot histograms for age distribution
+recovered_patients %>%
+  ggplot(aes(x = age)) +
+  geom_histogram(binwidth = 5, fill = "blue", color = "white", alpha = 0.7) +
+  labs(title = "Age Distribution for Recovered Patients",
+       x = "Age",
+       y = "Count") +
+  theme_minimal()
+
+non_recovered_patients %>%
+  ggplot(aes(x = age)) +
+  geom_histogram(binwidth = 5, fill = "red", color = "white", alpha = 0.7) +
+  labs(title = "Age Distribution for Non-Recovered Patients",
+       x = "Age",
+       y = "Count") +
+  theme_minimal()
+
+# Perform Shapiro-Wilk test for age distribution
+recovered_age_test <- shapiro.test(recovered_patients$age)
+non_recovered_age_test <- shapiro.test(non_recovered_patients$age)
+
+# Print test results
+print("Shapiro-Wilk Test for Recovered Patients:")
+print(recovered_age_test)
+
+print("Shapiro-Wilk Test for Non-Recovered Patients:")
+print(non_recovered_age_test)
 ```
 
 1. **Does the Shapiro-Wilk test results indicated that the data follow a normal distributions?**  
 2. **How does it affect our choice of statistical test?**  
 
-**Write your answers here as free text:**
+**Write your answers here as free text:** <br />
+1. The Shapiro-Wilk null hypothesis assumes the data is normally distributed, non-recovered patients p-value is smaller than 0.05 so we reject the null hypothesis and can't say the data is normally distributed.
+in the case of recovered patients, the p-value is a bit above 0.05 so we might say it can't reject the null hypothesis and the data is normally distributed, but with such a small difference it's debatable. <br />
+2. All in all, we won't assume the data is normally distributed, as one group's test score clearly isn't and the other is questionable. we can see the histogram shape can be misleading sometimes and we must not relay solely on it. we will have to choose a statistic test that does not assume normal distribution.
 
 ### Step 4: Perform a Mann-Whitney U Test
 
 ```{r mann-whitney-test}
 # Write code to perform a Mann-Whitney U test
+# Perform the Mann-Whitney U test (Wilcoxon rank-sum test in R)
+mann_whitney_test <- wilcox.test(recovered_patients$age, non_recovered_patients$age,  paired = FALSE, alternative = "two.sided")
+
+# Print the test results
+print("Mann-Whitney U Test Results:")
+print(mann_whitney_test)
 ```
 
 ### Step 5: Visualize the Results with Boxplots
@@ -232,6 +293,21 @@ Note: Any value other than zero in the "recovered" column means that the patient
 
 ```{r boxplot-visualization}
 # Write code to create the boxplot and annotate with the p-value
+
+ggplot(covid_data_cleaned, aes(x = group, y = age, fill = group)) +
+  geom_boxplot(alpha = 0.7, outlier.color = "red", outlier.size = 2) +
+  scale_fill_manual(values = c("Recovered" = "blue", "Non-Recovered" = "red")) +
+  labs(
+    title = "Age Distribution for Recovered and Non-Recovered Patients",
+    x = "Group",
+    y = "Age"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  stat_compare_means(method = "wilcox.test", label = "p.signif", label.y = max(covid_data_cleaned$age) + 5) + # Annotate p-value
+  annotate("text", x = 1.5, y = max(covid_data_cleaned$age) + 10, 
+           label = paste("p-value =", signif(mann_whitney_test$p.value, digits = 3)), size = 5)
+
 ```
 
 ### Step 6: Interpret the Results
@@ -242,8 +318,10 @@ In free text, answer the following questions:
 2. **What do the test statistic and p-value tell us?**  
 3. **Is there evidence to suggest a difference in mean age between the groups?**  
 
-**Write your answers here as free text:**
-
+**Write your answers here as free text:** <br />
+1. Yes, we can reject the null hypothesis.  <br />
+2. We got p-value below 0.025 for a two-sided test, and a t-statistic in such a high value that shows us there is very little overlap between the age group distributions, so we can distinguish between them.  (W = 37432, p-value = 7.798e-07). <br />
+3. We can see in the boxplot the difference in the mean of the ages between the groups. the non-recovered mean's value is the the recovered's Q3. 
 
 
 ## Task 3: Analyzing COVID-19 Mortality and Human Development Index (HDI)
@@ -257,7 +335,6 @@ In this task, we will explore the hypothesis that countries with a high Human De
 ```{r}
 # Enter your code here:
 covid_world <- read.csv("owid-covid-data.csv")
-covid_world
 ```
 
 ### Step 2: Take a Look at the Data
@@ -280,6 +357,15 @@ View(covid_world)
 
 ```{r}
 # Enter your code here:
+# Create the subset table 'covid_hdi_vs_deaths'
+covid_hdi_vs_deaths <- covid_world %>%
+  filter(date == "2021-11-08") %>%  
+  select(location, human_development_index, population, total_deaths) %>% 
+  drop_na() %>% 
+  mutate(total_deaths_per_million = round(total_deaths / population * 1e6, 0))
+
+# View the resulting dataset
+head(covid_hdi_vs_deaths)
 ```
 
 
@@ -290,6 +376,15 @@ View(covid_world)
 
 ```{r}
 # Enter your code here:
+ggplot(covid_hdi_vs_deaths, aes(x = human_development_index, y = total_deaths_per_million)) +
+  geom_point(color = "blue", alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") + 
+  labs(
+    title = "Relationship between HDI and Total Deaths per Million",
+    x = "Human Development Index (HDI)",
+    y = "Total Deaths per Million"
+  ) +
+  theme_minimal()
 ```
 
 ### Step 5: Calculate Correlations
@@ -298,6 +393,20 @@ View(covid_world)
 
 ```{r}
 # Enter your code here:
+# Calculate Pearson correlation coefficient
+pearson_corr <- cor(covid_hdi_vs_deaths$human_development_index, 
+                    covid_hdi_vs_deaths$total_deaths_per_million, 
+                    method = "pearson")
+
+# Calculate Spearman correlation coefficient
+spearman_corr <- cor(covid_hdi_vs_deaths$human_development_index, 
+                     covid_hdi_vs_deaths$total_deaths_per_million, 
+                     method = "spearman")
+
+# Print the correlation coefficients
+cat("Pearson Correlation Coefficient:", pearson_corr, "\n")
+cat("Spearman Correlation Coefficient:", spearman_corr, "\n")
+
 ```
 
 
@@ -306,14 +415,14 @@ View(covid_world)
 - Report the Pearson and Spearman correlation coefficients, the strength (weak/moderate/strong/very strong), and the direction (positive/negative).
 
 **Write your answers here as free text:**
-
+The Pearson coef is +0.5 which presents a positive-moderate strength, and the Spearman is +0.6 which is also positive and shows a bit stronger correlation, both indicate there is a relationship between HDI and total death per million.
 
 ### Step 7: Assess the Claim
 
 - Do you agree with the claim that increased HDI causes higher COVID-19 mortality? Write a detailed explanation.
 
-**Write your answers here as free text:**
-
+**Write your answers here as free text:** <br />
+correlation does not imply causation, so we don't know the nature of the relationship between HDI and COVID mortality.
 
 ### Step 8: Find Another Feature
 
@@ -323,14 +432,30 @@ View(covid_world)
 
 ```{r}
 # Enter your code here:
+# Create the subset table 'covid_hdi_vs_deaths'
+covid_age_vs_deaths <- covid_world %>%
+  filter(date == "2021-11-08") %>%  
+  select(location, median_age, population, total_deaths) %>% 
+  drop_na() %>% 
+  mutate(total_deaths_per_million = round(total_deaths / population * 1e6, 0))
+
+ggplot(covid_age_vs_deaths, aes(x = median_age, y = total_deaths_per_million)) +
+  geom_point(color = "blue", alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") + 
+  labs(
+    title = "Relationship between HDI and Total Deaths per Million",
+    x = "Median Age",
+    y = "Total Deaths per Million"
+  ) +
+  theme_minimal()
 ```
 
 ### Step 9: Explain the New Finding
 
 - Write your explanation for the relationship you found.
 
-**Write your answers here as free text:**
-
+**Write your answers here as free text:** <br />
+We chose "median age", as we saw in Task2 there is a relationship between age and recovery in the previous dataset. we can see in the plot that low median age have less deaths. low median age means the population is generally younger, which might help in COVID recovery. age is a factor calculated in HDI, the higher the age the higher the HDI - so we can hypothesis the age is the contributing factor to the correlation.
 
 ## Task 4 - Sequence Alignment
 
@@ -345,17 +470,24 @@ This file contain the amino acids sequence of the COVID-19 spike protein from di
 - Load the file using the correct function from the package "Biostrings" and assign to a variable called "variants"
 ```{r}
 # Enter your code here:
+file_path <- "covid_spike_variants.fasta"
+variants <- readAAStringSet(file_path)
+variants
 ```
 
 - How many amina acids are in the Alpha variant?
 
-**Write your answers here as free text:**
-
+**Write your answers here as free text:** <br />
+1270
 
 - Read the documentation for the Multiple Sequence Alignment (msa) function from the package "msa"
 - Run MSA for the sequences in "variants" and assign the results to "variants.msa"
 ```{r}
 # Enter your code here:
+?msa
+
+variants.msa <- msa(variants)
+variants.msa
 ```
 
 
@@ -367,18 +499,24 @@ msaR(AAMultipleAlignment(variants.msa), colorscheme = "taylor")
 - (1) Which amino-acids appear in position #26? (type "AMINO_ACID_CODE" in the console)
 - (2) Write an example of a SNP that can cause the change in amino acid as we see in the Gamma variant
 
-**Write your answers here as free text:**
-
+**Write your answers here as free text:** <br />
+1. we have "P" - Proline, except in the 'Gamma Brazil' varient which has a "S" - Serine. <br />
+2. "CCG" having a SNP to turn into "AGC"
 
 Phylogenetic tree for the COVID19 variants:
 - Use the package "seqinr" to generate a distance matrix from the MSA results
 ```{r include=FALSE}
 # Enter your code here:
+variants.msa.seqinr <- msaConvert(variants.msa, type="seqinr::alignment")
+variants.msa.distmat <- seqinr::dist.alignment(variants.msa.seqinr, matrix = "similarity")
+variants.msa.distmat
 ```
 
 - Plot a phylogenetic tree (dendrogram) assembled by hierarchical clustering using the "ward.D" method
 ```{r}
 # Enter your code here:
+variants.msa.clusters <- hclust(variants.msa.distmat, method = "ward.D")
+plot(variants.msa.clusters, hang = -1, main = "Covid19 Varinats Phylogenetic Tree", xlab = "Variants", ylab  = "Distance")
 ```
 
 
@@ -386,8 +524,9 @@ Phylogenetic tree for the COVID19 variants:
 1. Which variant is most similar to the Beta variant?
 2. Which pair of variants are the closest?
 
-**Write your answers here as free text:**
-
+**Write your answers here as free text:** <br />
+1. the Gamma_Brazil is most similar <br />
+2. 19A_China and Epsilon_USA has a distance score of 0.04854521, so they are the closest.
 
 # Instructions to Knit the Homework as an HTML File Before Submission
 

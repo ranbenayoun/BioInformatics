@@ -1,0 +1,13 @@
+---
+title: "Packages for tutorial 4"
+author: "Almog Angel"
+date: "11/14/2021"
+output: html_document
+---
+
+- Please install the following packages from CRAN (`install.packages()`) or Bioconductor (`BiocManager::install()`)
+```{r}
+packages_for_tutorial_4 <- c("DESeq2", "GEOquery", "hrbrthemes", "apeglm", "AnnotationDbi", "org.Hs.eg.db",
+                            "ReportingTools", "EnhancedVolcano", "pheatmap")
+BiocManager::install(packages_for_tutorial_4)
+```

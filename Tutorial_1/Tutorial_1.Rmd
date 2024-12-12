@@ -1,0 +1,427 @@
+---
+title: "Tutorial 1 - Introduction to R and Statistics (Part 1)"
+author: "Almog Angel"
+date: "17/01/2024"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+## **Data types**
+
+* R's basic data types are numeric, character, integer, logical and complex 
+  + You can use the function class() to check the data type
+  + "numeric" represents any numerical value
+  + "character" represents text (strings) values, denoted by using quotes (“”) around value
+  + "integer" represents integer numbers (e.g., 2L, the L indicates to R that it’s an integer)
+  + "logical" represents TRUE and FALSE (boolean values)
+  + "complex" represents complex numbers with real and imaginary parts (e.g., 1+4i)
+```{r}
+class('Hello')
+class(1)
+class(1L)
+class(1 + 2i)
+class(FALSE)
+```
+
+## **Assignment**
+
+* Assignment is performed by "<-"
+	 + **object_name <- value**
+
+```{r}
+x <- 8
+y <- 10
+print(paste("x equals:", x, " and y equals:", y))
+print(paste("x equals:", x, " and y equals:", y), quote=F) # remove quotes when printing
+```
+
+* You can also use "=" for assignment
+  + **object_name = value**
+  + **However, we will stick with "<-" from now on**
+  + **You can read more about the difference between "<-" and "=" in R here: \n <https://stackoverflow.com/questions/1741820/what-are-the-differences-between-and-assignment-operators-in-r>**
+
+* Assignment of mixed data types - R will make an assumption for the data type that makes most sense
+
+```{r}
+x <- c(5, 3.2, TRUE)
+x
+class(x)  # R assume that everything is a character
+```
+
+
+## **Mathematical operations**
+
+```{r}
+x <- 3
+x+2 # scalar addition
+x*2 # scalar multiplication
+x^2 # raise each component to the second power
+x # x remained unchanged
+x <- x*2 # now x change as we perform assignment
+x
+
+```
+
+## **Logical operations**
+```{r}
+x <- TRUE
+paste("x", x)
+paste("x == x", x == x)
+paste("x != x", x != x)
+paste("!x", !x)
+y <- FALSE
+paste("x & y", x & y)
+paste("x | y", x | y)
+```
+
+```{r}
+# perform element-wise (not pair-wise!) operation producing result having length of the longer operand
+x & c(x, y) 
+x | c(x, y)
+print("---------------------")
+# only the first element of the operands resulting into a single length logical vector
+x && c(x, y) 
+x && c(y, x) 
+x || c(x, y)
+x || c(y, x)
+```
+
+## **Data structures**
+* R's basic data structures include the vector, list, matrix, data frame, and factors.
+
+**Vectors**:
+Vector is sequence of data elements of the same type (numeric, character or logical).
+
+```{r}
+print("Create a vector with 4 components and assign to - x")
+x <- c(3, 2, 10, 5) 
+x
+print("Create a vector with a sequence of numbers from 1 to 4 and assign to - y")
+y <- 1:4 
+y
+print("Create a sequence of numbers with gaps of 10 and assign to - z")
+z <- seq(0, 100, by=10)
+z
+print("Create a sequence of decreasing numbers and assign to - t")
+t <- seq(100, 0, -1)
+t
+print("Get the 5th components of the vector t")
+t[5]
+```
+
+**Note** that the first index in R is 1 (unlike other languages that use zero-based indexing)!
+
+**Lists**:
+A list is an ordered collection of components. A list allows you to gather 
+a variety of often unrelated objects of different length and type 
+under one name. Each object or element in the list has a numbered position 
+and can have names. The list can be created with the list() function. 
+
+```{r}
+# Example of a list with 4 components: a string, a numeric vector, a matrix, and a scalar
+mylist <- list(name="Almog",
+          mynumbers=c(6, 4, 3, 2, 1),
+          mymatrix=matrix(1:8, ncol=2),
+          age=85)
+mylist
+
+# You can access components of a list in several ways:
+mylist[[3]] # 3rd component of the list
+mylist[["mynumbers"]] # component named mynumbers in list
+mylist$age
+```
+
+**Matrices**:
+A matrix is an array of rows and columns of the same data type. 
+
+```{r}
+# You can create a matrix by combine vectors of the same length
+x <- c(6, 7, 5, 4)
+y <- c(4, 13, 6, 15)
+z <- c(14, 3, 5, 7)
+matrix_by_columns <- cbind(x, y, z) # combine vectors by columns
+matrix_by_columns
+matrix_by_rows <- rbind(x, y, z) # combine vectors by rows
+matrix_by_rows
+
+dim(matrix_by_rows) # print the dimensions of the matrix
+t_matrix_by_rows <- t(matrix_by_rows) # transpose the matrix
+t_matrix_by_rows == matrix_by_columns
+
+# matrix indexing
+m <- matrix_by_rows
+m[2,] # rows
+m[,1] # columns
+m[c(2:3, 5), 2:4] # range
+
+# You can also create a matrix with the matrix() function
+m1 <- matrix(1:8, nrow=2)
+m1
+# By default, the matrix is filled column-by-column. If you set byrow=TRUE the matrix will be filled row by row 
+m2 <- matrix(1:8, nrow=2, byrow=TRUE)
+m2
+```
+
+**Data frames**:
+Data frame is more general two dimensional data structure than matrix, as its 
+columns can have different data types (numeric, character, logical, etc.)
+
+```{r}
+chr <- c("Alon", "Muhammad", "David", "Sarah")
+num <- c("175", "182", "201", "160")
+logi <- c(TRUE, FALSE, TRUE, FALSE)
+mydf <- data.frame(chr, num, logi)
+mydf
+
+colnames(mydf) <- c("first_name", "height", "love_cats") # change column names
+mydf
+
+mydf[,2:3] # columns 2 and 3 of data frame
+mydf$height # variable height in the data frame
+mydf[c(1,3),] # get 1st and 3rd rows
+mydf[mydf$height>180,] # get all rows where height > 400
+```
+
+## **Tibbles and the Tidyverse**:
+The tidyverse is an opinionated collection of R packages designed for data science. 
+All packages share an underlying design philosophy, grammar, and data structures.
+  + Intuitive and easy to read code
+  + Easy data handling and organization
+  + Powerful visualizations
+
+``` {r}
+library(tidyverse)
+data("Titanic")
+
+# Convert to tibble
+titanic.tbl <- as_tibble(Titanic)
+
+titanic.tbl %>% 
+  filter(Age != "Child") %>% 
+  select(-c(Sex, Age)) %>% 
+  ggplot(., aes(x=Survived, y=n)) +
+  geom_bar(stat='identity', aes(fill=Class),  position = position_dodge())
+```
+
+https://www.data-to-viz.com/
+
+## **Conditions**
+
+**if/else**
+
+if (condition) {    
+  # executed when condition is TRUE    
+  } else {    
+  # executed when condition is FALSE    
+  }    
+
+An opening curly brace should never go on its own line and should always 
+be followed by a new line. A closing curly brace should always go on its own 
+line, unless it’s followed by else. Always indent the code inside curly braces.
+
+**ifelse(test, yes, no)**
+
+ifelse returns a value with the same shape as test which is filled with elements selected from either yes or no depending on whether the element of test is TRUE or FALSE.
+
+```{r}
+# Check if x is Blue
+x <- "Blue"
+ifelse(x == "Blue", "Yey!", "Neh")
+ifelse(x != "Blue", "Yey!", "Neh")
+```
+
+## **Loops**
+
+**For**
+
+```{r}
+for (i in 1:10) { # number of repetitions
+ print (paste("This is iteration ",i)) # the task to be repeated
+}
+
+```
+
+**While**
+
+```{r}
+i <- 1
+while (i <= 10) { # condition for the loop
+  print (paste("This is iteration ",i)) # the task to be repeated
+  i <- i + 1
+} 
+```
+
+## **Functions**
+You should consider writing a function if you used the same block of code 
+more than twice.
+
+```{r}
+sqSum <- function(x, y){
+result = x^2+y^2
+return(result)
+}
+# now use this function in your main script
+z = sqSum(2,3)
+z
+```
+
+
+**Apply functions family**
+- Try to do your best to replace every “for” by the helper functions from the “apply” family. 
+- The apply family of functions in base R (apply(), lapply(), tapply(), etc) consists of functions that eliminate the need for many common “for” loops.
+
+```{r}
+m1 <- cbind(c(3,0,3,3), c(3,0,0,0), c(3,0,0,3), c(1,1,0,0), c(1,1,1,0), c(1,1,1,0))
+m1
+
+# second argument of apply that equals 1, indicates that rows of the matrix /data frame
+# will be the input for the function
+result <- apply(m1, 1, sum)
+result
+
+# second argument of apply that equals 2, indicates that columns of the matrix /data frame
+# will be the input for the function
+result <- apply(m1, 2, sum)
+result
+```
+
+## **Additional tips**
+Break your code into a well explained blocks
+
+```{r}
+# Load data --------------------------
+t <- c(1,2,3)
+# Plot data --------------------------
+z = 4
+```
+- Pay attention to the error messages in the editor window and at the console
+
+
+## **Statistics**
+
+There are two main branches in the field of statistics: "Descriptive" and "Inferential".
+
+
+- *Descriptive Statistics*
+Descriptive statistics is all about summarizing and presenting data in a way that's easy to grasp. 
+It includes using simple summaries like the average (mean), middle value (median), and graphs to show patterns in data, like how spread out the values are or what the most common values are.
+
+
+Measures of dispersion: these numbers describe how spread out the values are in the dataset. Examples include the range, interquartile range, standard deviation, and variance.
+
+- Example
+We will simulate a dataset for the heights (in cm) of 100 plants:
+```{r}
+# Setting a seed for reproducibility
+set.seed(123)
+
+# Generating random heights
+plant_heights <- round(rnorm(100, mean = 150, sd = 10), 1)
+
+# Display the first few heights
+head(plant_heights)
+```
+
+Measures of central tendency: describe where the center of a dataset is located.
+```{r}
+mean_height <- mean(plant_heights)
+median_height <- median(plant_heights)
+mode_height <- mode(plant_heights)
+
+paste("mean:" , mean_height)
+paste("median:" , median_height)
+```
+
+Measures of dispersion: describe how spread out the values are in the dataset.
+```{r}
+max_height <- max(plant_heights)
+min_height <- min(plant_heights)
+range_height <- range(plant_heights)
+sd_height <- sd(plant_heights)
+var_height <- var(plant_heights)
+quant_height <- quantile(plant_heights)
+
+paste("Maximum:" , max_height)
+paste("Minimum:" , min_height)
+print("Range:")
+range_height
+paste("Standard Deviation:" , sd_height)
+paste("Variance:" , var_height)
+print("Quantiles:")
+quant_height
+```
+
+Using the `summary` function:
+```{r}
+summary(plant_heights)
+```
+
+Using tables:
+```{r}
+table(round(plant_heights))
+```
+
+```{r}
+# Define score ranges
+breaks <- seq(from = 120, to = 180, by = 10)
+
+# Cut the data into intervals
+cut_heights <- cut(plant_heights, breaks = breaks, include.lowest = TRUE)
+
+# Create frequency table
+frequency <- table(cut_heights)
+
+frequency
+```
+
+Using graphs:
+- Boxplot
+```{r}
+boxplot(plant_heights, main = "Boxplot of Plant Heights", ylab = "Height (cm)", col = "blue")
+```
+
+- Histogram
+```{r}
+hist(plant_heights, main = "Histogram of Plant Heights", ylab = "Height (cm)", col = "red")
+```
+
+
+- Next tutorial: *Inferential Statistics*
+
+
+
+## **Class exercise**
+
+- Use setwd() to set your working directory
+- Use read_tsv() to read the file "patient-data.txt" into "patients"
+```{r}
+
+```
+
+- Use the function table() to find out how many patients are live?
+```{r}
+
+
+```
+
+- Calculate the BMI for each patient in a new column named "BMI" 
+BMI = Weight (kg) / Height^2 (m)
+```{r}
+
+
+```
+
+- What is the value of "Weight" in the 75% quantile?
+```{r}
+
+```
+
+- Plot a boxplot (geom_boxplot) that compare the BMI of females from Colorado and New Jersey by smokers and non-smokers
+```{r}
+
+
+```
+
+
+- Knit to HTML this R Markdown code!
