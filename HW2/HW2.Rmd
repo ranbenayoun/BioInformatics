@@ -1,0 +1,286 @@
+---
+title: "Homework 2: Differential Gene Expression Analysis"
+author: "Almog Angel"
+Students: "<Ran Benayoun> <206078974> <Gal Carmely> <student ID 2>"
+date: "12/12/2024"
+output: html_document
+---
+
+- **Objective:** Perform a differential gene expression (DGE) analysis using RNA-Seq data. 
+
+## Step 1: Load Required Packages and Set Working Directory
+```{r}
+library(DESeq2)
+library(ashr)
+library(EnhancedVolcano)
+library(factoextra)
+library(clusterProfiler)
+library(msigdbr)
+library(tidyverse)
+
+library(GEOquery)
+
+
+#setwd("path/to/your/working/directory")
+```
+
+## Step 2: Research Context
+
+- Read the abstract of the study "Temporal changes in postprandial blood transcriptomes reveal subject-specific patterns of expression of innate immunity genes after a high-fat meal" (PDF file attached - "Lemay_2019").
+
+- Answer the following questions using in your own words (not ChatGPT's):
+  1. Explain the term "whole blood transcriptome" (up to 100 words).
+  2. Summarize the objective and design of the study (up to 250 words).
+```{}
+Write your answers here:
+(1) whole blood transcriptome is a record of the genes who were expressed into protein in the blood cells (white blood cells) using RNA sequencing.
+(2) The researchers wanted to determine the effect of DHA and blueberries after a high fat meal. they measured the RNA expressed during digesting each compound in regards to the time of day and fasting hours.
+```
+
+## Step 3: Retrieve Data from GEO
+
+- Locate the Gene Expression Omnibus (GEO) accession number in the manuscript.
+- Write it below:
+```{}
+GEO accession number:GSE127530
+```
+
+- Download the counts data (the second one: "fixed") and Series Matrix File(s) from the GEO website.
+
+- Load the count matrix and metadata into the corresponding variables below
+```{r}
+counts <- read.table("GSE127530_fixed_combinedCounts.txt.gz", 
+                     stringsAsFactors = FALSE, sep = '\t', 
+                     header = TRUE, check.names = FALSE)
+metadata <- getGEO(filename = "GSE127530_series_matrix.txt")
+metadata_pdata <- pData(metadata)
+
+```
+
+## Step 4: Prepare Data
+
+- Convert `metadata` to a tibble.
+- Select and rename the following columns:
+  - `Sample` = `description`
+  - `Subject` = `study subject id #:ch1`
+  - `Day` = `test day:ch1`
+  - `Time` = `time of blood draw:ch1`
+- Ensure the `Time` column is a factor.
+```{r}
+# Implement your code here:
+# Load the necessary library
+library(dplyr)
+
+# Convert metadata to a tibble and prepare the data
+metadata <- as_tibble(metadata_pdata) %>%
+  select(
+    Sample = `description`,
+    Subject = `study subject id #:ch1`,
+    Day = `test day:ch1`,
+    Time = `time of blood draw:ch1`
+  ) %>%
+  mutate(Time = as.factor(Time))  # Ensure the Time column is a factor
+
+# View the prepared tibble
+metadata
+
+
+```
+
+In R, factors are used to represent categorical variables, and these factors have levels that dictate their ordering.
+When performing statistical analysis, the first level of a factor is treated as the reference level.
+Other levels are compared against this reference
+
+- Make "fasting" the reference level for `Time`.
+```{r}
+metadata$Time <- relevel(metadata$Time, ref="fasting")
+```
+
+- Remove genes with zero total counts.
+```{r}
+# Implement your code here:
+counts <- counts[rowSums(counts) > 0, ]
+```
+
+## Step 5: Run DESeq2
+
+- Make a DESeq2 object called `dds` and use the `Time` column for the design
+```{r}
+# Implement your code here:
+dds <- DESeqDataSetFromMatrix(
+  countData = counts,            # The raw count matrix
+  colData = metadata,                 # Metadata data frame
+  design = ~ Time                     # Experimental design using the "Time" column
+)
+```
+
+- Perform the differential expression analysis with DESeq2.
+```{r}
+# Implement your code here:
+dds <- DESeq(dds)  # Perform normalization and differential expression analysis
+resultsNames(dds)  # View available contrasts or comparisons
+```
+
+
+- We are now comparing the groups of fasting and time = 3 hours 
+- Use the function lfcShrink() to adjust the LFC values with the following arguments:
+  (1) coef="Time_3.hr.postprandial_vs_fasting" for the name of the coefficient to shrink
+  (2) type="apeglm"
+- Store the results back into `res`
+```{r}
+# Implement your code here:
+# Shrink Log2 Fold Change values using apeglm
+res <- lfcShrink(dds, coef = "Time_3.hr.postprandial_vs_fasting", type = "apeglm")
+```
+
+
+- Sort `res` by the adjusted p-values from lowest to highest and store in `resOrdered`
+```{r}
+# Implement your code here:
+resOrdered <- res[order(res$pvalue),]
+significant_genes <- res[which(res$padj < 0.05), ]
+num_significant_genes <- nrow(significant_genes)
+num_significant_genes
+```
+
+- Write the number of significant genes (padj < 0.05):
+```{}
+Number of significant genes: 3
+```
+
+## Step 6: Perform PCA
+
+- Use the function `vst()` to extract the normalized counts from `dds` into `counts.vst`
+```{r}
+# Implement your code here:
+
+```
+
+- Use the function `plotPCA()` to generate a ggplot2 object for the PCA visualization and store it into `pcaData`:
+  (1) Use the top 1000 variable genes
+  (2) Use `intgroup=c("Subject", "Day")` for grouping
+  (3) Use `returnData = TRUE`
+```{r}
+# Implement your code here:
+
+```
+
+- Use ggplot to plot the object you made above:
+- Plot the percent of variance explained in PC1 and PC2 labels
+```{r}
+# Implement your code here:
+
+```
+  
+- Answer the following questions using in your own words (not ChatGPT's):
+  1. What is the purpose of Principal Component Analysis (PCA) in data analysis? (up to 150 words)
+  2. What do the axes labeled “PC1” and “PC2” mean? (up to 100 words)
+```{}
+Write your answer here:
+(1)
+(2)
+```
+
+## Step 7: Clustering Analysis
+
+- Write a short script that preform hierarchical or kmeans clustering (choose one):
+  - Extract the data from `counts.vst` using the `assay(function)`
+  - Use only top 1,000 variable genes
+```{r}
+# Implement your code here:
+
+```
+
+- Based on the PCA and the clustering you made above:
+  1. Is your clustering result consistent with the PCA plot? describe. yes/no
+  2. What is the main source of variation among samples in this study? explain what led you to this conclusion? (up to 150 words)
+  3. Do you think this source of variation is essential for our analysis? why? (up to 150 words)
+  4. Suggest another source of variation and explain what led you to this conclusion? (up to 150 words)
+- Support your answers using the PCA/clustering plots and adjust the code as needed to justify your conclusions.
+```{}
+Write your answers here:
+
+```
+* Hint: Look at Figure 1A in the manuscript.
+
+
+## Step 8: Update DESeq2 Design
+
+- Make a second DESeq2 object called `dds2`.
+- This time make use of the insights you gained above into the `design` formula.
+```{r}
+# Implement your code here:
+
+```
+
+- How does the new object differ from the original one? Explain why these changes are expected to improve the results. (up to 150 words)
+```{}
+Write your answer here:
+
+```
+
+- Run DESeq() and lfcShrink() again, save the results into `res2` and sort by adjusted p-value in `resOrdered2`
+```{r}
+# Implement your code here:
+
+```
+
+- How many significant genes (adjusted p-value < 0.05) did you get this time?
+```{}
+Write your answer here:
+```
+
+- Explain in short the meaning of each column in `resOrdered2`
+```{}
+Write your answer here:
+
+```
+
+- Select 3-5 genes of interest from the most differentially expressed genes (DEGs).
+- Search for their names online to identify if they share any common characteristics.
+- In your response, list the genes you chose and describe what you discovered about them.
+```{}
+Write your answer here:
+
+```
+
+## Step 9: GSEA Analysis
+
+- Now you  will use functional enrichment analysis with the Hallmark pathways gene sets.
+- We learned two ways to perform functional enrichment analysis - over representation and gene set enrichment analysis (GSEA). Here you will run GSEA.  
+
+- First we need to create an ordered vector by the log fold change with the gene symbols as names:
+```{r}
+resOrdered2.fatDiet.nona <- resOrdered2[!is.na(resOrdered2$padj) & resOrdered2$log2FoldChange > 0,]
+genes_ordered <- sort(resOrdered2.fatDiet.nona$log2FoldChange, decreasing = T)
+```
+
+- We now need to get the Hallmarks pathways gene sets. We will use the msigdbr package for that:
+```{r}
+hallmarks <- msigdbr(species = "Homo sapiens", category = "H") %>% 
+  dplyr::select(gs_name, gene_symbol)
+```
+
+- Use the GSEA() function from the clusterProfiler package to run the analysis.
+- You can find an awesome tutorial for the clusterProfiler package here: http://yulab-smu.top/biomedical-knowledge-mining-book/universal-api.html
+- Save your results into `hm`
+```{r}
+# Implement your code here:
+
+```
+
+- Finally, visualize the results of this analysis using the dotPlot function from the clusterProfiler database.
+```{r}
+hallmarks <- msigdbr(species = "Homo sapiens", category = "H")
+hallmarks <- hallmarks[,c('gs_name', 'gene_symbol')]
+dotplot(hm)
+```
+
+- Summarize the results based on PCA, clustering, DEG, and GSEA analysis. (up to 250 words)
+- Make sure you base your answer on the different steps you made (PCA, clustering, DEG, GSEA) 
+```{}
+Write your answer here:
+```
+
+Knit your homework as an HTML file and submit it.
+Eat healthy :)
