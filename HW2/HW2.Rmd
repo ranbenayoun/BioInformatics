@@ -153,7 +153,7 @@ Number of significant genes: 3
 - Use the function `vst()` to extract the normalized counts from `dds` into `counts.vst`
 ```{r}
 # Implement your code here:
-
+counts.vst <- vst(dds, blind = FALSE)
 ```
 
 - Use the function `plotPCA()` to generate a ggplot2 object for the PCA visualization and store it into `pcaData`:
@@ -162,14 +162,38 @@ Number of significant genes: 3
   (3) Use `returnData = TRUE`
 ```{r}
 # Implement your code here:
+normcounts <- assay(counts.vst)
+var_per_gene <- apply(normcounts, 1, var)  # Calculate variance for each gene
+selectedGenes <- names(var_per_gene[order(var_per_gene, decreasing = TRUE)][1:1000])  # Top 1000 variable genes
+normcounts.top1Kvar <- t(normcounts[selectedGenes,])  # Transpose to make samples as rows
 
+# Perform PCA
+pcaResults <- prcomp(normcounts.top1Kvar, scale. = TRUE)  # Scale the data for PCA
 ```
 
 - Use ggplot to plot the object you made above:
 - Plot the percent of variance explained in PC1 and PC2 labels
 ```{r}
 # Implement your code here:
+# Step 1: Extract normalized counts and calculate variance
+normcounts <- assay(counts.vst)  # Extract normalized counts
+var_per_gene <- apply(normcounts, 1, var)  # Calculate variance for each gene
 
+# Step 2: Select the top 1000 variable genes
+selectedGenes <- names(sort(var_per_gene, decreasing = TRUE)[1:1000])  # Top 1000 variable genes
+counts.top1Kvar <- normcounts[selectedGenes, ]  # Subset to the top 1000 variable genes
+
+# Step 3: Create a new DESeqTransform object for the top variable genes
+counts.vst.top1K <- counts.vst[selectedGenes, ]
+
+# Step 4: Use plotPCA to generate PCA data
+pcaData <- plotPCA(counts.vst.top1K, intgroup = c("Subject", "Day"), returnData = TRUE)
+
+# Step 5: Display the PCA plot (optional, for testing)
+ggplot(pcaData, aes(PC1, PC2, color = Subject, shape = Day)) +
+  geom_point(size = 3) +
+  theme_minimal() +
+  labs(title = "PCA of Top 1000 Variable Genes")
 ```
   
 - Answer the following questions using in your own words (not ChatGPT's):
@@ -177,8 +201,11 @@ Number of significant genes: 3
   2. What do the axes labeled “PC1” and “PC2” mean? (up to 100 words)
 ```{}
 Write your answer here:
-(1)
-(2)
+(1) Principal component analysis (PCA) is a dimensionality reduction technique that simplifies large datasets by identifying principal components that preserve most of the original information. It achieves this by converting potentially correlated variables into a smaller, uncorrelated set of variables known as principal components. PCA reduces a high-dimensional dataset to a smaller feature space, effectively minimizing or eliminating common challenges like multicollinearity and overfitting.
+
+(2) PC1 represents the direction in space where the data points exhibit the greatest variance. It serves as the line that best captures the overall distribution of the projected points. The more variability captured by PC1, the more information is retained from the original dataset. No other principal component can capture more variance than PC1.
+
+PC2 is calculated similarly to PC1 but accounts for the next highest variance in the dataset. PC2 must be uncorrelated with PC1, meaning it is orthogonal (perpendicular) to PC1. This orthogonality ensures that the correlation between PC1 and PC2 is zero.
 ```
 
 ## Step 7: Clustering Analysis
@@ -188,6 +215,35 @@ Write your answer here:
   - Use only top 1,000 variable genes
 ```{r}
 # Implement your code here:
+# Extract normalized counts from counts.vst
+normcounts <- assay(counts.vst)
+
+# Calculate variance for each gene and select the top 1,000 variable genes
+var_per_gene <- apply(normcounts, 1, var)  # Variance for each gene
+selectedGenes <- names(sort(var_per_gene, decreasing = TRUE)[1:1000])  # Top 1,000 variable genes
+normcounts.top1K <- normcounts[selectedGenes, ]  # Subset to top 1,000 variable genes
+
+# Transpose the data for clustering (samples as rows, genes as columns)
+normcounts.transposed <- t(normcounts.top1K)
+
+# Perform k-means clustering
+set.seed(123)  # Set seed for reproducibility
+k <- 3  # Define the number of clusters (adjust as needed)
+kmeans_result <- kmeans(normcounts.transposed, centers = k, nstart = 25)
+
+# View clustering results
+print(kmeans_result$cluster)  # Cluster assignments for each sample
+print(kmeans_result$centers)  # Cluster centers
+
+# Optional: Visualize the clusters using PCA
+pcaData <- prcomp(normcounts.transposed, scale. = TRUE)
+pca_df <- data.frame(PC1 = pcaData$x[, 1], PC2 = pcaData$x[, 2], Cluster = factor(kmeans_result$cluster))
+
+library(ggplot2)
+ggplot(pca_df, aes(x = PC1, y = PC2, color = Cluster)) +
+  geom_point(size = 3) +
+  theme_minimal() +
+  labs(title = "K-means Clustering of Top 1,000 Variable Genes", color = "Cluster")
 
 ```
 
