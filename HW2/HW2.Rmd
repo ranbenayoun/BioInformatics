@@ -201,7 +201,7 @@ pca_plot
 ```{}
 Write your answer here:
 (1) PCA reduce the number of dimentions by projecting the data on less dimentions (2). this way we can categories the data into clusters and see it visualy easier.
-(2)PC1 and PC2 are component axis with the highest variance, which the algorithm fitted as the best clusters(PC1>PC2).
+(2)PC1 and PC2 are component axis with the highest variance, which the algorithm fitted as the best clusters(PC1>PC2).The more variability captured by PC1, the more information is retained from the original dataset. PC2 must be uncorrelated with PC1, meaning it is orthogonal (perpendicular) to PC1. This orthogonality ensures that the correlation between PC1 and PC2 is zero.
 ```
 
 ## Step 7: Clustering Analysis
