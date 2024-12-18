@@ -153,7 +153,7 @@ Number of significant genes: 3
 - Use the function `vst()` to extract the normalized counts from `dds` into `counts.vst`
 ```{r}
 # Implement your code here:
-
+counts.vst <- assay(vst(dds, blind = FALSE))
 ```
 
 - Use the function `plotPCA()` to generate a ggplot2 object for the PCA visualization and store it into `pcaData`:
@@ -162,14 +162,37 @@ Number of significant genes: 3
   (3) Use `returnData = TRUE`
 ```{r}
 # Implement your code here:
-
+library(ggplot2)
+pcaData <- plotPCA(vst(dds,blind=FALSE), ntop=1000, intgroup=c("Subject", "Day"), returnData = TRUE)
 ```
 
 - Use ggplot to plot the object you made above:
 - Plot the percent of variance explained in PC1 and PC2 labels
 ```{r}
 # Implement your code here:
+# Perform PCA on the VST-normalized counts
+pca_data <- prcomp(t(counts.vst))
 
+# Get variance explained for PC1 and PC2
+percentVar <- (pca_data$sdev^2) / sum(pca_data$sdev^2) * 100
+percentVar <- round(percentVar, 1)
+
+# Create a data frame for plotting
+pca_df <- data.frame(PC1 = pca_data$x[, 1],
+                     PC2 = pca_data$x[, 2],
+                     Subject = colData(dds)$Subject) # Add metadata for grouping
+
+# Generate PCA plot using ggplot2
+pca_plot <- ggplot(pca_df, aes(x = PC1, y = PC2, color = Subject)) +
+  geom_point(size = 3) +
+  labs(
+    title = "PCA Plot of Normalized Counts",
+    x = paste0("PC1: ", percentVar[1], "% variance"),
+    y = paste0("PC2: ", percentVar[2], "% variance")
+  ) +
+  theme_minimal()
+
+pca_plot
 ```
   
 - Answer the following questions using in your own words (not ChatGPT's):
@@ -177,8 +200,8 @@ Number of significant genes: 3
   2. What do the axes labeled “PC1” and “PC2” mean? (up to 100 words)
 ```{}
 Write your answer here:
-(1)
-(2)
+(1) PCA reduce the number of dimentions by projecting the data on less dimentions (2). this way we can categories the data into clusters and see it visualy easier.
+(2)PC1 and PC2 are component axis with the highest variance, which the algorithm fitted as the best clusters(PC1>PC2).
 ```
 
 ## Step 7: Clustering Analysis
@@ -188,7 +211,49 @@ Write your answer here:
   - Use only top 1,000 variable genes
 ```{r}
 # Implement your code here:
+# Extract normalized VST counts
+vst_counts <- counts.vst
 
+# Calculate row variance for each gene
+gene_variance <- apply(vst_counts, 1, var)
+
+# Select the top 1,000 most variable genes
+top_genes <- head(order(gene_variance, decreasing = TRUE), 1000)
+vst_counts_top <- vst_counts[top_genes, ]
+
+#fviz_nbclust(vst_counts_top, FUN = kmeans, method = "wss")
+#decided based on the elbow methos to go with 3 clusters
+
+# Transpose the data: Samples as rows, genes as columns
+vst_counts_top_t <- t(vst_counts_top)
+
+# Perform k-means clustering (choose k = 3 clusters as an example)
+set.seed(42) # For reproducibility
+kmeans_result <- kmeans(vst_counts_top_t, centers = 3)
+
+# Add cluster information to a data frame for plotting
+cluster_df <- data.frame(Sample = colnames(vst_counts_top),
+                         Cluster = as.factor(kmeans_result$cluster))
+
+# Print cluster assignments
+print(cluster_df)
+
+# Optional: Visualize the clustering using PCA
+pca_res <- prcomp(vst_counts_top_t)
+pca_df <- data.frame(PC1 = pca_res$x[, 1],
+                     PC2 = pca_res$x[, 2],
+                     Cluster = as.factor(kmeans_result$cluster))
+
+kmeans_plot <- ggplot(pca_df, aes(x = PC1, y = PC2, color = Cluster)) +
+  geom_point(size = 3) +
+  labs(
+    title = "K-means Clustering of Top 1,000 Variable Genes",
+    x = "PC1",
+    y = "PC2"
+  ) +
+  theme_minimal()
+
+kmeans_plot
 ```
 
 - Based on the PCA and the clustering you made above:
@@ -198,8 +263,11 @@ Write your answer here:
   4. Suggest another source of variation and explain what led you to this conclusion? (up to 150 words)
 - Support your answers using the PCA/clustering plots and adjust the code as needed to justify your conclusions.
 ```{}
-Write your answers here:
-
+Write your answers here: <br />
+1. No, from the PCA we could deduce the data can be clustered into 4 clusters, and the data distribution is different. <br/>
+2. Each indevidual base-level of gene expression is different, so it's a variation the researchers couldn't isolate between subjects. we can see that clearly in the PCA plot with each cluster currespond to a different subject. <br/>
+3. To achieve a well rounded research, we need to test different subjects to be able to draw conclutions on the general population, so yes we have to have various subjects with their gene expression. <br/>
+4. In the K-means we have 3 clusters, that may be indicative to the variation from each day exammined, as we had 1-3 days.
 ```
 * Hint: Look at Figure 1A in the manuscript.
 
@@ -210,30 +278,80 @@ Write your answers here:
 - This time make use of the insights you gained above into the `design` formula.
 ```{r}
 # Implement your code here:
+# Define design formula with two factors (additive model)
+dds2 <- DESeqDataSetFromMatrix(countData = counts, 
+                               colData = metadata, 
+                               design = ~ Subject + Day,)
 
+# Perform differential expression analysis
+dds2 <- DESeq(dds2)
+resultsNames(dds2)  # View available contrasts or comparisons
+counts2.vst <- assay(vst(dds2, blind = FALSE))
+pcaData2 <- plotPCA(vst(dds2,blind=FALSE), ntop=1000, intgroup=c("Subject", "Day"), returnData = TRUE)
+
+# Get variance explained for PC1 and PC2
+pcaResults2 <- prcomp(counts2.vst, scale. = TRUE)  # Scale the data for PCA
+percentVar <- (pcaResults2$sdev^2) / sum(pcaResults2$sdev^2) * 100
+percentVar <- round(percentVar, 1)
+
+# Generate PCA plot using ggplot2
+pca_plot2 <- ggplot(pcaData2, aes(x = PC1, y = PC2, color = Subject)) +
+  geom_point(size = 3) +
+  labs(
+    title = "PCA Plot of Normalized Counts",
+    x = paste0("PC1: ", percentVar[1], "% variance"),
+    y = paste0("PC2: ", percentVar[2], "% variance")
+  ) +
+  theme_minimal()
+
+pca_plot2
 ```
 
 - How does the new object differ from the original one? Explain why these changes are expected to improve the results. (up to 150 words)
 ```{}
 Write your answer here:
-
+we get a higher % variance in PC1 and each subject is more clustered (isn't that as we designed?)
 ```
 
 - Run DESeq() and lfcShrink() again, save the results into `res2` and sort by adjusted p-value in `resOrdered2`
 ```{r}
 # Implement your code here:
+# Run DESeq again on the existing DESeq2 object (dds)
+dds2 <- DESeq(dds2)
+```
+```{r}
+# Perform log fold-change shrinkage using "apeglm" method
+res2 <- lfcShrink(dds2, coef = "Day_3_vs_1", type = "apeglm")
+```
+
+```{r}
+# Order results by adjusted p-value
+resOrdered2 <- res2[order(res2$pvalue),]
+
+# View the first few rows of sorted results
+head(resOrdered2)
+significant_genes2 <- res2[which(res2$padj < 0.05), ]
+num_significant_genes2 <- nrow(significant_genes2)
+num_significant_genes2
 
 ```
 
 - How many significant genes (adjusted p-value < 0.05) did you get this time?
 ```{}
 Write your answer here:
+92
 ```
 
 - Explain in short the meaning of each column in `resOrdered2`
 ```{}
-Write your answer here:
-
+Write your answer here: <br/>
+baseMean - The average normalized expression level of a gene across all samples. <br/>
+log2FoldChange  - The log2-transformed fold change for the comparison being tested.
+Positive values indicate upregulation, and negative values indicate downregulation for the comparison. <br/>
+lfcSE  - (Log Fold Change Standard Error) The standard error of the log2 fold change estimate, reflecting its variability.     <br/>
+pvalue - The raw p-value from the statistical test, representing the probability of observing the data if the null hypothesis is true.      <br/>  
+padj - he adjusted p-value using the Benjamini-Hochberg procedure to control the false discovery rate (FDR). 
+Genes with padj < 0.05 are considered significantly differentially expressed.
 ```
 
 - Select 3-5 genes of interest from the most differentially expressed genes (DEGs).
@@ -266,7 +384,15 @@ hallmarks <- msigdbr(species = "Homo sapiens", category = "H") %>%
 - Save your results into `hm`
 ```{r}
 # Implement your code here:
+hm <- GSEA(
+  geneList = genes_ordered,               # Ordered vector of genes
+  TERM2GENE = hallmarks,                  # Hallmarks pathways gene sets
+  pvalueCutoff = 0.05,                    # p-value cutoff for enriched terms
+  verbose = FALSE                         # Suppress output messages
+)
 
+# View results
+head(as.data.frame(hm))
 ```
 
 - Finally, visualize the results of this analysis using the dotPlot function from the clusterProfiler database.
