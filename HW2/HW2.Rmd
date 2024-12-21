@@ -1,7 +1,7 @@
 ---
 title: "Homework 2: Differential Gene Expression Analysis"
 author: "Almog Angel"
-Students: "<Ran Benayoun> <206078974> <Gal Carmely> <student ID 2>"
+Students: "<Ran Benayoun> <206078974> <Gal Carmely> <315831321>"
 date: "12/12/2024"
 output: html_document
 ---
@@ -17,10 +17,9 @@ library(factoextra)
 library(clusterProfiler)
 library(msigdbr)
 library(tidyverse)
-
 library(GEOquery)
-
-
+library(dplyr)
+library(ggplot2)
 #setwd("path/to/your/working/directory")
 ```
 
@@ -54,7 +53,6 @@ counts <- read.table("GSE127530_fixed_combinedCounts.txt.gz",
                      header = TRUE, check.names = FALSE)
 metadata <- getGEO(filename = "GSE127530_series_matrix.txt")
 metadata_pdata <- pData(metadata)
-
 ```
 
 ## Step 4: Prepare Data
@@ -68,23 +66,14 @@ metadata_pdata <- pData(metadata)
 - Ensure the `Time` column is a factor.
 ```{r}
 # Implement your code here:
-# Load the necessary library
-library(dplyr)
-
-# Convert metadata to a tibble and prepare the data
 metadata <- as_tibble(metadata_pdata) %>%
-  select(
+  dplyr::select(
     Sample = `description`,
     Subject = `study subject id #:ch1`,
     Day = `test day:ch1`,
     Time = `time of blood draw:ch1`
   ) %>%
-  mutate(Time = as.factor(Time))  # Ensure the Time column is a factor
-
-# View the prepared tibble
-metadata
-
-
+  mutate(Time = as.factor(Time))
 ```
 
 In R, factors are used to represent categorical variables, and these factors have levels that dictate their ordering.
@@ -99,7 +88,7 @@ metadata$Time <- relevel(metadata$Time, ref="fasting")
 - Remove genes with zero total counts.
 ```{r}
 # Implement your code here:
-counts <- counts[rowSums(counts) > 0, ]
+counts <- counts[rowSums(counts[,-1]) > 0, ]
 ```
 
 ## Step 5: Run DESeq2
@@ -112,13 +101,14 @@ dds <- DESeqDataSetFromMatrix(
   colData = metadata,                 # Metadata data frame
   design = ~ Time                     # Experimental design using the "Time" column
 )
+rownames(dds) <- counts[, 1]          # Assign rownames from gene column
+
 ```
 
 - Perform the differential expression analysis with DESeq2.
 ```{r}
 # Implement your code here:
-dds <- DESeq(dds)  # Perform normalization and differential expression analysis
-resultsNames(dds)  # View available contrasts or comparisons
+dds <- DESeq(dds)  
 ```
 
 
@@ -129,7 +119,6 @@ resultsNames(dds)  # View available contrasts or comparisons
 - Store the results back into `res`
 ```{r}
 # Implement your code here:
-# Shrink Log2 Fold Change values using apeglm
 res <- lfcShrink(dds, coef = "Time_3.hr.postprandial_vs_fasting", type = "apeglm")
 ```
 
@@ -137,8 +126,8 @@ res <- lfcShrink(dds, coef = "Time_3.hr.postprandial_vs_fasting", type = "apeglm
 - Sort `res` by the adjusted p-values from lowest to highest and store in `resOrdered`
 ```{r}
 # Implement your code here:
-resOrdered <- res[order(res$pvalue),]
-significant_genes <- res[which(res$padj < 0.05), ]
+resOrdered <- res[order(res$padj),]
+significant_genes <- resOrdered[which(resOrdered$padj < 0.05), ]
 num_significant_genes <- nrow(significant_genes)
 num_significant_genes
 ```
@@ -162,7 +151,6 @@ counts.vst <- assay(vst(dds, blind = FALSE))
   (3) Use `returnData = TRUE`
 ```{r}
 # Implement your code here:
-library(ggplot2)
 pcaData <- plotPCA(vst(dds,blind=FALSE), ntop=1000, intgroup=c("Subject", "Day"), returnData = TRUE)
 ```
 
@@ -211,50 +199,22 @@ Write your answer here:
   - Use only top 1,000 variable genes
 ```{r}
 # Implement your code here:
-# Extract normalized VST counts
-vst_counts <- counts.vst
+normcounts <- assay(vst(dds, blind = TRUE))
+var_per_gene <- apply(normcounts, 1, var)  # Calculate variance for each gene
+selectedGenes <- names(var_per_gene[order(var_per_gene, decreasing = TRUE)][1:1000])  # Top 1000 variable genes
+normcounts.top1Kvar <- t(normcounts[selectedGenes,])  # Transpose to make samples as rows
+# Determine the optimal number of clusters using the Elbow Method
+fviz_nbclust(normcounts.top1Kvar, FUN = kmeans, method = "wss")
 
-# Calculate row variance for each gene
-gene_variance <- apply(vst_counts, 1, var)
+# Run K-means clustering with k = 3
+kmeans_out <- kmeans(normcounts.top1Kvar, centers = 3, nstart = 25)
 
-# Select the top 1,000 most variable genes
-top_genes <- head(order(gene_variance, decreasing = TRUE), 1000)
-vst_counts_top <- vst_counts[top_genes, ]
-
-#fviz_nbclust(vst_counts_top, FUN = kmeans, method = "wss")
-#decided based on the elbow methos to go with 3 clusters
-
-# Transpose the data: Samples as rows, genes as columns
-vst_counts_top_t <- t(vst_counts_top)
-
-# Perform k-means clustering (choose k = 3 clusters as an example)
-set.seed(42) # For reproducibility
-kmeans_result <- kmeans(vst_counts_top_t, centers = 3)
-
-# Add cluster information to a data frame for plotting
-cluster_df <- data.frame(Sample = colnames(vst_counts_top),
-                         Cluster = as.factor(kmeans_result$cluster))
-
-# Print cluster assignments
-print(cluster_df)
-
-# Optional: Visualize the clustering using PCA
-pca_res <- prcomp(vst_counts_top_t)
-pca_df <- data.frame(PC1 = pca_res$x[, 1],
-                     PC2 = pca_res$x[, 2],
-                     Cluster = as.factor(kmeans_result$cluster))
-
-kmeans_plot <- ggplot(pca_df, aes(x = PC1, y = PC2, color = Cluster)) +
-  geom_point(size = 3) +
-  labs(
-    title = "K-means Clustering of Top 1,000 Variable Genes",
-    x = "PC1",
-    y = "PC2"
-  ) +
-  theme_minimal()
-
-kmeans_plot
+# Visualize clusters
+fviz_cluster(kmeans_out, data = normcounts.top1Kvar) +
+  ggtitle("K-means Clustering (k = 3)")
 ```
+
+
 
 - Based on the PCA and the clustering you made above:
   1. Is your clustering result consistent with the PCA plot? describe. yes/no
@@ -263,10 +223,10 @@ kmeans_plot
   4. Suggest another source of variation and explain what led you to this conclusion? (up to 150 words)
 - Support your answers using the PCA/clustering plots and adjust the code as needed to justify your conclusions.
 ```{}
-Write your answers here: <br />
-1. No, from the PCA we could deduce the data can be clustered into 4 clusters, and the data distribution is different. <br/>
-2. Each indevidual base-level of gene expression is different, so it's a variation the researchers couldn't isolate between subjects. we can see that clearly in the PCA plot with each cluster currespond to a different subject. <br/>
-3. To achieve a well rounded research, we need to test different subjects to be able to draw conclutions on the general population, so yes we have to have various subjects with their gene expression. <br/>
+Write your answers here:
+1. No, from the PCA we could deduce the data can be clustered into 4 clusters, and the data distribution is different.
+2. Each indevidual base-level of gene expression is different, so it's a variation the researchers couldn't isolate between subjects. we can see that clearly in the PCA plot with each cluster currespond to a different subject.
+3. To achieve a well rounded research, we need to test different subjects to be able to draw conclutions on the general population, so yes we have to have various subjects with their gene expression.
 4. In the K-means we have 3 clusters, that may be indicative to the variation from each day exammined, as we had 1-3 days.
 ```
 * Hint: Look at Figure 1A in the manuscript.
@@ -279,79 +239,40 @@ Write your answers here: <br />
 ```{r}
 # Implement your code here:
 # Define design formula with two factors (additive model)
-dds2 <- DESeqDataSetFromMatrix(countData = counts, 
-                               colData = metadata, 
-                               design = ~ Subject + Day,)
-
-# Perform differential expression analysis
-dds2 <- DESeq(dds2)
-resultsNames(dds2)  # View available contrasts or comparisons
-counts2.vst <- assay(vst(dds2, blind = FALSE))
-pcaData2 <- plotPCA(vst(dds2,blind=FALSE), ntop=1000, intgroup=c("Subject", "Day"), returnData = TRUE)
-
-# Get variance explained for PC1 and PC2
-pcaResults2 <- prcomp(counts2.vst, scale. = TRUE)  # Scale the data for PCA
-percentVar <- (pcaResults2$sdev^2) / sum(pcaResults2$sdev^2) * 100
-percentVar <- round(percentVar, 1)
-
-# Generate PCA plot using ggplot2
-pca_plot2 <- ggplot(pcaData2, aes(x = PC1, y = PC2, color = Subject)) +
-  geom_point(size = 3) +
-  labs(
-    title = "PCA Plot of Normalized Counts",
-    x = paste0("PC1: ", percentVar[1], "% variance"),
-    y = paste0("PC2: ", percentVar[2], "% variance")
-  ) +
-  theme_minimal()
-
-pca_plot2
+dds2 <- DESeqDataSetFromMatrix(countData = counts, colData = metadata, design = ~ Subject + Time)
 ```
 
 - How does the new object differ from the original one? Explain why these changes are expected to improve the results. (up to 150 words)
 ```{}
 Write your answer here:
-we get a higher % variance in PC1 and each subject is more clustered (isn't that as we designed?)
+We chose to do the new design with adding "Time" to the "Subject" element, as it is the most contributing to the variance and we can't nullify each subject gene expression.
 ```
 
 - Run DESeq() and lfcShrink() again, save the results into `res2` and sort by adjusted p-value in `resOrdered2`
 ```{r}
 # Implement your code here:
-# Run DESeq again on the existing DESeq2 object (dds)
 dds2 <- DESeq(dds2)
-```
-```{r}
-# Perform log fold-change shrinkage using "apeglm" method
-res2 <- lfcShrink(dds2, coef = "Day_3_vs_1", type = "apeglm")
-```
-
-```{r}
-# Order results by adjusted p-value
+res2 <- lfcShrink(dds2, coef = "Time_3.hr.postprandial_vs_fasting", type = "apeglm")
 resOrdered2 <- res2[order(res2$pvalue),]
-
-# View the first few rows of sorted results
-head(resOrdered2)
 significant_genes2 <- res2[which(res2$padj < 0.05), ]
 num_significant_genes2 <- nrow(significant_genes2)
 num_significant_genes2
-
 ```
 
 - How many significant genes (adjusted p-value < 0.05) did you get this time?
 ```{}
 Write your answer here:
-92
+63
 ```
 
 - Explain in short the meaning of each column in `resOrdered2`
 ```{}
-Write your answer here: <br/>
-baseMean - The average normalized expression level of a gene across all samples. <br/>
-log2FoldChange  - The log2-transformed fold change for the comparison being tested.
-Positive values indicate upregulation, and negative values indicate downregulation for the comparison. <br/>
-lfcSE  - (Log Fold Change Standard Error) The standard error of the log2 fold change estimate, reflecting its variability.     <br/>
-pvalue - The raw p-value from the statistical test, representing the probability of observing the data if the null hypothesis is true.      <br/>  
-padj - he adjusted p-value using the Benjamini-Hochberg procedure to control the false discovery rate (FDR). 
-Genes with padj < 0.05 are considered significantly differentially expressed.
+Write your answer here:
+baseMean - The average normalized expression level of a gene across all samples.
+log2FoldChange  - The log2 ratio of expression levels between the comparison groups. Positive values indicate upregulation, and negative values indicate downregulation for the comparison.
+lfcSE  - (Log Fold Change Standard Error) The standard error of the log2 fold change estimate. Reflects the uncertainty in the estimated fold change.
+pvalue - The raw p-value from the statistical test, representing the probability of observing the data if the null hypothesis is true.  
+padj - he adjusted p-value using the Benjamini-Hochberg procedure to control the false discovery rate (FDR). Genes with padj < 0.05 are considered significantly differentially expressed.
 ```
 
 - Select 3-5 genes of interest from the most differentially expressed genes (DEGs).
@@ -359,7 +280,12 @@ Genes with padj < 0.05 are considered significantly differentially expressed.
 - In your response, list the genes you chose and describe what you discovered about them.
 ```{}
 Write your answer here:
+MARC1- Involved in cellular detoxification of nitrogen compound, Chromosome 1, Biased expression in fat and thyroid.
+ACSL4 - The protein encoded by this gene is an isozyme of the long-chain fatty-acid-coenzyme A ligase family
+ZBTB7B - This gene encodes a zinc finger-containing transcription factor that acts as a key regulator of lineage commitment of immature T-cell precursors. Broad expression in the intestine.
+FAM129B - Enables transcription coactivator activity. Involved in several processes, including gonadotropin secretion; negative regulation of apoptotic process; and regulation of nucleobase-containing compound metabolic process. expressed in the esophagus and stomach.
 
+the genes are assosiated with metabolism all througout the digestive tract and in cellular processes.
 ```
 
 ## Step 9: GSEA Analysis
@@ -384,15 +310,7 @@ hallmarks <- msigdbr(species = "Homo sapiens", category = "H") %>%
 - Save your results into `hm`
 ```{r}
 # Implement your code here:
-hm <- GSEA(
-  geneList = genes_ordered,               # Ordered vector of genes
-  TERM2GENE = hallmarks,                  # Hallmarks pathways gene sets
-  pvalueCutoff = 0.05,                    # p-value cutoff for enriched terms
-  verbose = FALSE                         # Suppress output messages
-)
-
-# View results
-head(as.data.frame(hm))
+hm <- GSEA(geneList = genes_ordered, TERM2GENE = hallmarks)
 ```
 
 - Finally, visualize the results of this analysis using the dotPlot function from the clusterProfiler database.
@@ -406,6 +324,7 @@ dotplot(hm)
 - Make sure you base your answer on the different steps you made (PCA, clustering, DEG, GSEA) 
 ```{}
 Write your answer here:
+We can see in GSEA that the most significant genes expressed in the analysis design that disregards the subject's variability, are related to metabolic pathways (digesting fats or expressing OXPHOS that takes part in mitochondria energy production). Through the PCA we could see that each subject had its own clutter, and that the Day wasn't effecting the gene variability as much for each subject, but we can't be sure as we don't know the make-up of the PC1 and PC2 axis. We then continued to do Kmeans and saw there is a better fit for 3 clusters, that may be indicative for the time of fasting.
 ```
 
 Knit your homework as an HTML file and submit it.
