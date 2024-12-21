@@ -14,6 +14,7 @@ library(DESeq2)
 library(ashr)
 library(EnhancedVolcano)
 library(factoextra)
+
 library(clusterProfiler)
 library(msigdbr)
 library(tidyverse)
@@ -33,8 +34,8 @@ library(GEOquery)
   2. Summarize the objective and design of the study (up to 250 words).
 ```{}
 Write your answers here:
-(1) whole blood transcriptome is a record of the genes who were expressed into protein in the blood cells (white blood cells) using RNA sequencing.
-(2) The researchers wanted to determine the effect of DHA and blueberries after a high fat meal. they measured the RNA expressed during digesting each compound in regards to the time of day and fasting hours.
+(1) whole blood transcriptome is a record of the genes which were expressed into protein in the blood cells (white blood cells) using RNA sequencing.
+(2) The researchers wanted to determine the effect of DHA (add two-three words on what is DHA in brackets) and blueberries after a high fat meal. They measured the RNA expressed during digestion of each compound in regards to the time of day and fasting hours.
 ```
 
 ## Step 3: Retrieve Data from GEO
@@ -200,7 +201,7 @@ pca_plot
   2. What do the axes labeled “PC1” and “PC2” mean? (up to 100 words)
 ```{}
 Write your answer here:
-(1) PCA reduce the number of dimentions by projecting the data on less dimentions (2). this way we can categories the data into clusters and see it visualy easier.
+(1) PCA reduces the number of dimentions by projecting the data on less dimentions (2). This is done by lineariliy transforming the data to a new coordinate system that allows easy identification of the directions that capture the largest variation in the data. This way we can categories the data into clusters and visualize it easier.
 (2)PC1 and PC2 are component axis with the highest variance, which the algorithm fitted as the best clusters(PC1>PC2).The more variability captured by PC1, the more information is retained from the original dataset. PC2 must be uncorrelated with PC1, meaning it is orthogonal (perpendicular) to PC1. This orthogonality ensures that the correlation between PC1 and PC2 is zero.
 ```
 
@@ -264,9 +265,9 @@ kmeans_plot
 - Support your answers using the PCA/clustering plots and adjust the code as needed to justify your conclusions.
 ```{}
 Write your answers here: <br />
-1. No, from the PCA we could deduce the data can be clustered into 4 clusters, and the data distribution is different. <br/>
-2. Each indevidual base-level of gene expression is different, so it's a variation the researchers couldn't isolate between subjects. we can see that clearly in the PCA plot with each cluster currespond to a different subject. <br/>
-3. To achieve a well rounded research, we need to test different subjects to be able to draw conclutions on the general population, so yes we have to have various subjects with their gene expression. <br/>
+1. No, from the PCA we could deduce the data can be clustered into 4 clusters, whereas the clustering result shows 3 clusters. Also, the data distribution is different. <br/>
+2. Each indevidual base-level of gene expression is different, so it's a variation the researchers couldn't isolate between subjects. we can see that clearly in the PCA plot with each cluster corresponds to a different subject. <br/> (You write in 1 that there are 4 clusters, but here you say that "each cluster corresponds to a different subject" - where there seem to be 5 subjects in the plot, not 4)
+3. To achieve a well comprehensive research, we need to test different subjects to be able to draw conclutions on the general population, so yes we have to have various subjects with their gene expression. <br/>
 4. In the K-means we have 3 clusters, that may be indicative to the variation from each day exammined, as we had 1-3 days.
 ```
 * Hint: Look at Figure 1A in the manuscript.
@@ -311,6 +312,10 @@ pca_plot2
 ```{}
 Write your answer here:
 we get a higher % variance in PC1 and each subject is more clustered (isn't that as we designed?)
+(If I understood correctly, the addition of the day to the grouping improved the clustering. So the question is why this change of adding the day is expected to improve the results?)
+
+My version:
+The new object differs from the original by a significant increase in variance explained by PC1 (98.9% vs. 31.5%). One major change in the new design is the addition of “Day” to the PCA grouping beside “Subject.” By adding “Day” to the design, we consider the environmental changes (e.g., temperature, humidity, light exposure, or lab conditions) and human factors (e.g., different technicians handling samples, variation in pipetting accuracy, instrument calibration, reagent quality, or time of sample processing) that can change between days. Considering these changes ensures PC1 captures the biological signal, making more accurate results.
 ```
 
 - Run DESeq() and lfcShrink() again, save the results into `res2` and sort by adjusted p-value in `resOrdered2`
@@ -350,7 +355,7 @@ log2FoldChange  - The log2-transformed fold change for the comparison being test
 Positive values indicate upregulation, and negative values indicate downregulation for the comparison. <br/>
 lfcSE  - (Log Fold Change Standard Error) The standard error of the log2 fold change estimate, reflecting its variability.     <br/>
 pvalue - The raw p-value from the statistical test, representing the probability of observing the data if the null hypothesis is true.      <br/>  
-padj - he adjusted p-value using the Benjamini-Hochberg procedure to control the false discovery rate (FDR). 
+padj - the adjusted p-value using the Benjamini-Hochberg procedure to control the false discovery rate (FDR). 
 Genes with padj < 0.05 are considered significantly differentially expressed.
 ```
 
@@ -359,7 +364,17 @@ Genes with padj < 0.05 are considered significantly differentially expressed.
 - In your response, list the genes you chose and describe what you discovered about them.
 ```{}
 Write your answer here:
+1.	RRM2 (Ribonucleotide Reductase Regulatory Subunit M2):
+  This gene encodes one of the two subunits of ribonucleotide reductase, an enzyme responsible for   catalyzing the formation of deoxyribonucleotides from ribonucleotides. The protein (M2) is         synthesized in a cell-cycle-dependent manner, and transcription from this gene can result in       two isoforms due to alternative promoter usage.
+2.	HIST1H3B (Histone Cluster 1, H3b):
+  HIST1H3B encodes a replication-dependent histone that is part of the histone H3 family. Histones   are nuclear proteins that form the core of nucleosomes, around which DNA is wrapped. This          nucleosome structure is essential for chromatin organization and higher-order chromatin            compaction. The gene is intronless, located in the histone gene cluster on chromosome 6p22-p21.3,   and its transcripts terminate with a palindromic element rather than a polyA tail.
+3.	IGLL5 (Immunoglobulin Lambda-Like Polypeptide 5):
+  IGLL5 encodes one of the immunoglobulin lambda-like polypeptides. Unlike other immunoglobulin      genes, it does not require somatic rearrangement for expression. Its first exon is unrelated to    immunoglobulin variable genes, while its second and third exons correspond to the immunoglobulin   lambda joining 1 and lambda constant 1 gene segments. Alternative splicing generates multiple      transcript variants.
 
+Summary of Shared Characteristics:
+  RRM2, HIST1H3B, and IGLL5 are involved in essential cellular processes such as DNA synthesis,      chromatin organization, and immune system function. These genes exhibit tightly regulated          expression patterns and structural specializations that are critical for their respective roles    in maintaining cellular and physiological homeostasis.
+
+Reference: www.genecards.org
 ```
 
 ## Step 9: GSEA Analysis
